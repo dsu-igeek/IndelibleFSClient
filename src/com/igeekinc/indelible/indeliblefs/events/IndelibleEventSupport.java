@@ -19,20 +19,26 @@ package com.igeekinc.indelible.indeliblefs.events;
 import java.util.ArrayList;
 import java.util.Iterator;
 
+/**
+ * Handles event support and dispatch for historical and non-historical event sources
+ * @author David L. Smith-Uchida
+ *
+ */
 public class IndelibleEventSupport
 {
 	private IndelibleEventSource source;
 	private ArrayList<IndelibleEventQueue>queues = new ArrayList<IndelibleEventQueue>();
-	
+	private MultipleQueueDispatcher dispatcher;
     
-    public IndelibleEventSupport(IndelibleEventSource source)
+    public IndelibleEventSupport(IndelibleEventSource source, MultipleQueueDispatcher dispatcher)
     {
     	this.source = source;
+    	this.dispatcher = dispatcher;
     }
     
     public synchronized void addListener(IndelibleEventListener newListener)
     {
-    	IndelibleEventQueue newQueue = new IndelibleEventQueue(newListener, null);
+    	IndelibleEventQueue newQueue = dispatcher.createQueue(newListener, null);
     	queues.add(newQueue);
     }
     
@@ -45,7 +51,7 @@ public class IndelibleEventSupport
 	public synchronized void addListenerAfterID(IndelibleEventListener listener, long startingID)
 	{
 		IndelibleEventIterator oldEventIterator = source.eventsAfterID(startingID);
-    	IndelibleEventQueue newQueue = new IndelibleEventQueue(listener, oldEventIterator);
+    	IndelibleEventQueue newQueue = dispatcher.createQueue(listener, oldEventIterator);
     	queues.add(newQueue);
 	}
 	
@@ -58,7 +64,7 @@ public class IndelibleEventSupport
 	public synchronized void addListenerAfterTime(IndelibleEventListener listener, long timestamp)
 	{
 		IndelibleEventIterator oldEventIterator = source.eventsAfterTime(timestamp);
-    	IndelibleEventQueue newQueue = new IndelibleEventQueue(listener, oldEventIterator);
+    	IndelibleEventQueue newQueue = dispatcher.createQueue(listener, oldEventIterator);
     	queues.add(newQueue);
 	}
 	

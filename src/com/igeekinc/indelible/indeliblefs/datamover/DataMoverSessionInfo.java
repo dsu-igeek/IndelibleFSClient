@@ -13,69 +13,62 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.@
  */
- 
-package com.igeekinc.indelible.indeliblefs.datamover;
 
-import java.io.IOException;
+package com.igeekinc.indelible.indeliblefs.datamover;
 
 import com.igeekinc.indelible.oid.DataMoverSessionID;
 
 public class DataMoverSessionInfo
 {
-    private DataMoverSessionID sessionID;
-    private DataMoverServerInfo serverInfo;
-    public DataMoverSessionInfo(DataMoverSessionID sessionID)
-    {
-        this.sessionID = sessionID;
+	private DataMoverSessionID sessionID;
+	private DataMoverServerInfo serverInfo;
+	public DataMoverSessionInfo(DataMoverSessionID sessionID)
+	{
+		this.sessionID = sessionID;
 
-    }
-    
-    public DataMoverSessionID getSessionID()
-    {
-        return sessionID;
-    }
-    
-    synchronized void setServerInfo(DataMoverServerInfo serverInfo)
-    {
-        this.serverInfo = serverInfo;
-        notifyAll();
-    }
-    
-    public synchronized boolean checkConnection(long timeout)
-    {
-    	if (serverInfo == null)
-    	{
-    		try
-    		{
-    			wait(timeout);
-    		}
-    		catch (InterruptedException e)
-    		{
+	}
 
-    		}
-    	}
-    	if (serverInfo == null)
-    		return false;
-    	return true;
-    }
-    
-    public DataMoverServerInfo getServerInfo()
-    {
-        return serverInfo;
-    }
+	public DataMoverSessionID getSessionID()
+	{
+		return sessionID;
+	}
 
-    public void sendSynchronousCommand(DataMoverCommand command) throws IOException
-    {
-    	if (serverInfo == null)
-    		throw new IOException("Session was closed");
-        serverInfo.sendSynchronousCommand(command);
-    }
-    
-    public void sendAsynchronousCommand(DataMoverCommand command) throws IOException
-    {
-    	if (serverInfo == null)
-    		throw new IOException("Session was closed");
-    	serverInfo.sendAsynchronousCommand(command);
-    }
+	synchronized void setServerInfo(DataMoverServerInfo serverInfo)
+	{
+		this.serverInfo = serverInfo;
+		notifyAll();
+	}
+
+	public synchronized boolean checkConnection(long timeout)
+	{
+		if (serverInfo == null)
+		{
+			try
+			{
+				wait(timeout);
+			}
+			catch (InterruptedException e)
+			{
+
+			}
+		}
+		if (serverInfo == null)
+			return false;
+		return true;
+	}
+
+	public DataMoverServerInfo getServerInfo()
+	{
+		return serverInfo;
+	}
+
+	public String dump()
+	{
+		StringBuffer returnBuffer = new StringBuffer();
+		returnBuffer.append(sessionID.toString());
+		returnBuffer.append(":\n");
+		returnBuffer.append(serverInfo.dump());
+		return returnBuffer.toString();
+	}
 }
 

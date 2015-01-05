@@ -19,7 +19,7 @@ package com.igeekinc.indelible.indeliblefs.server;
 import java.io.IOException;
 import java.io.Serializable;
 import java.rmi.RemoteException;
-import java.util.HashMap;
+import java.util.Map;
 import java.util.concurrent.Future;
 
 import org.apache.log4j.Logger;
@@ -40,7 +40,6 @@ import com.igeekinc.indelible.indeliblefs.events.RemoteIndelibleIteratorProxy;
 import com.igeekinc.indelible.indeliblefs.exceptions.PermissionDeniedException;
 import com.igeekinc.indelible.indeliblefs.security.EntityAuthenticationClient;
 import com.igeekinc.indelible.indeliblefs.security.SessionAuthentication;
-import com.igeekinc.indelible.indeliblefs.uniblock.CASCollection;
 import com.igeekinc.indelible.indeliblefs.uniblock.CASCollectionConnection;
 import com.igeekinc.indelible.indeliblefs.uniblock.CASCollectionEvent;
 import com.igeekinc.indelible.indeliblefs.uniblock.CASIDDataDescriptor;
@@ -51,6 +50,7 @@ import com.igeekinc.indelible.indeliblefs.uniblock.CASStoreInfo;
 import com.igeekinc.indelible.indeliblefs.uniblock.DataVersionInfo;
 import com.igeekinc.indelible.indeliblefs.uniblock.SegmentInfo;
 import com.igeekinc.indelible.indeliblefs.uniblock.TransactionCommittedEvent;
+import com.igeekinc.indelible.indeliblefs.uniblock.exceptions.SegmentExists;
 import com.igeekinc.indelible.indeliblefs.uniblock.exceptions.SegmentNotFound;
 import com.igeekinc.indelible.indeliblefs.uniblock.remote.AsyncRetrieveSegmentByCASIdentifierCommandBlock;
 import com.igeekinc.indelible.indeliblefs.uniblock.remote.AsyncStoreReplicatedSegmentCommandBlock;
@@ -223,7 +223,7 @@ public class RemoteCASCollectionConnectionProxy extends ClientRemoteAsyncManager
 	}
 
 	@Override
-	public CASCollection getCollection()
+	public CASCollectionID getCollectionID()
 	{
 		throw new UnsupportedOperationException();
 	}
@@ -284,7 +284,7 @@ public class RemoteCASCollectionConnectionProxy extends ClientRemoteAsyncManager
 
 	@Override
 	public void storeVersionedSegment(ObjectID id, CASIDDataDescriptor segmentDescriptor)
-			throws IOException
+			throws IOException, SegmentExists
 	{
 		if (segmentDescriptor == null)
 			throw new IllegalArgumentException("segmentDescriptor cannot be null");
@@ -309,7 +309,7 @@ public class RemoteCASCollectionConnectionProxy extends ClientRemoteAsyncManager
 	}
 
 	@Override
-	public boolean releaseSegment(CASSegmentID releaseID) throws IOException
+	public boolean releaseSegment(ObjectID releaseID) throws IOException
 	{
 		return remoteConnection.releaseSegment(releaseID);
 	}
@@ -343,7 +343,7 @@ public class RemoteCASCollectionConnectionProxy extends ClientRemoteAsyncManager
 	}
 
 	@Override
-	public HashMap<String, Serializable> getMetaDataResource(
+	public Map<String, Serializable> getMetaDataResource(
 			String mdResourceName) throws RemoteException,
 			PermissionDeniedException, IOException
 	{
@@ -352,10 +352,18 @@ public class RemoteCASCollectionConnectionProxy extends ClientRemoteAsyncManager
 
 	@Override
 	public void setMetaDataResource(String mdResourceName,
-			HashMap<String, Serializable> resource) throws RemoteException,
+			Map<String, Serializable> resource) throws RemoteException,
 			PermissionDeniedException, IOException
 	{
 		remoteConnection.setMetaDataResource(mdResourceName, resource);
+	}
+
+	
+	@Override
+	public void removeMetaDataResouce(String mdResourceName) throws PermissionDeniedException, IOException
+	{
+		// TODO Auto-generated method stub
+		
 	}
 
 	@Override
@@ -374,7 +382,7 @@ public class RemoteCASCollectionConnectionProxy extends ClientRemoteAsyncManager
 	{
 		if (eventSupport == null)
 		{
-			eventSupport = new IndelibleEventSupport(this);
+			eventSupport = new IndelibleEventSupport(this, null);
 			try
 			{
 				eventListenerThread = new Thread(new EventListenerRunnable(this, remoteConnection.getLastEventID() + 1), "RemoteCASCollectionConnectionProxy event listener");
@@ -499,7 +507,7 @@ public class RemoteCASCollectionConnectionProxy extends ClientRemoteAsyncManager
 			IndelibleVersion replicateVersion,
 			CASIDDataDescriptor sourceDescriptor,
 			CASCollectionEvent curCASEvent,
-			AsyncCompletion<Void, ? super A> completionHandler, A attachment)
+			AsyncCompletion<Void, A> completionHandler, A attachment)
 			throws IOException
 	{
 		RemoteCASCollectionConnectionProxyFuture future = new RemoteCASCollectionConnectionProxyFuture(completionHandler, attachment);
@@ -531,7 +539,7 @@ public class RemoteCASCollectionConnectionProxy extends ClientRemoteAsyncManager
 	}
 
 	@Override
-	public <A> void storeSegmentAsync(CASIDDataDescriptor sourceDescriptor, AsyncCompletion<CASStoreInfo, ? super A> completionHandler,
+	public <A> void storeSegmentAsync(CASIDDataDescriptor sourceDescriptor, AsyncCompletion<CASStoreInfo, A> completionHandler,
 			A attachment) throws IOException
 	{
 		RemoteStoreSegmentFuture future = new RemoteStoreSegmentFuture(completionHandler, attachment);
@@ -568,7 +576,7 @@ public class RemoteCASCollectionConnectionProxy extends ClientRemoteAsyncManager
 	}
 	@Override
 	public Future<DataVersionInfo> retrieveSegmentAsync(ObjectID segmentID)
-			throws IOException, SegmentNotFound
+			throws IOException
 	{
 		// TODO Auto-generated method stub
 		return null;
@@ -577,7 +585,7 @@ public class RemoteCASCollectionConnectionProxy extends ClientRemoteAsyncManager
 	@Override
 	public <A> void retrieveSegmentAsync(ObjectID segmentID,
 			AsyncCompletion<DataVersionInfo, A> completionHandler, A attachment)
-			throws IOException, SegmentNotFound
+			throws IOException
 	{
 		// TODO Auto-generated method stub
 		

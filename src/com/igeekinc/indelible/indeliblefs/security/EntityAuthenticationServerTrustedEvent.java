@@ -26,12 +26,12 @@ import com.igeekinc.util.logging.ErrorLogMessage;
 public class EntityAuthenticationServerTrustedEvent extends EventObject
 {
     private static final long serialVersionUID = -2913090476543034356L;
-    EntityAuthenticationServer addedServer;
+    EntityAuthenticationServer trustedServer;
     
-    public EntityAuthenticationServerTrustedEvent(EntityAuthenticationClient source, EntityAuthenticationServer addedServer)
+    public EntityAuthenticationServerTrustedEvent(EntityAuthenticationClient source, EntityAuthenticationServer trustedServer)
     {
         super(source);
-        this.addedServer = addedServer;
+        this.trustedServer = trustedServer;
     }
 
     @Override
@@ -39,7 +39,7 @@ public class EntityAuthenticationServerTrustedEvent extends EventObject
     {
         try
         {
-            return "Server "+addedServer.getEntityID().toString()+" trusted";
+            return "Server "+trustedServer.getEntityID().toString()+" trusted";
         } catch (RemoteException e)
         {
             Logger.getLogger(getClass()).error(new ErrorLogMessage("Caught exception"), e);
@@ -47,8 +47,8 @@ public class EntityAuthenticationServerTrustedEvent extends EventObject
         }
     }
 
-    public EntityAuthenticationServer getAddedServer()
+    public EntityAuthenticationServer getTrustedServer()
     {
-        return addedServer;
+        return trustedServer;
     }
 }

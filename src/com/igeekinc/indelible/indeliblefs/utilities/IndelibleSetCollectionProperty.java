@@ -33,11 +33,9 @@ import org.apache.log4j.Logger;
 
 import com.igeekinc.indelible.indeliblefs.exceptions.PermissionDeniedException;
 import com.igeekinc.indelible.indeliblefs.exceptions.VolumeNotFoundException;
-import com.igeekinc.indelible.indeliblefs.proxies.RemoteCASServerProxy;
 import com.igeekinc.indelible.indeliblefs.remote.IndelibleFileNodeRemote;
 import com.igeekinc.indelible.indeliblefs.security.AuthenticationFailureException;
 import com.igeekinc.indelible.indeliblefs.uniblock.CASCollectionConnection;
-import com.igeekinc.indelible.indeliblefs.uniblock.CASServer;
 import com.igeekinc.indelible.indeliblefs.uniblock.CASServerConnectionIF;
 import com.igeekinc.indelible.indeliblefs.uniblock.exceptions.CollectionNotFoundException;
 import com.igeekinc.indelible.oid.CASCollectionID;
@@ -114,7 +112,7 @@ public class IndelibleSetCollectionProperty extends IndelibleFSUtilBase
 
     	try
 		{
-			curCollectionConn = serverConn.getCollectionConnection(setCollectionID);
+			curCollectionConn = serverConn.openCollectionConnection(setCollectionID);
 			if (clearPropertySetName != null)
 			{
 				curCollectionConn.startTransaction();

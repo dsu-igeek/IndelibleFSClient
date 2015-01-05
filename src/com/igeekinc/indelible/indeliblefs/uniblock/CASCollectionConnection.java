@@ -18,7 +18,7 @@ package com.igeekinc.indelible.indeliblefs.uniblock;
 
 import java.io.IOException;
 import java.io.Serializable;
-import java.util.HashMap;
+import java.util.Map;
 import java.util.concurrent.Future;
 
 import com.igeekinc.indelible.indeliblefs.core.IndelibleFSTransaction;
@@ -28,7 +28,9 @@ import com.igeekinc.indelible.indeliblefs.core.RetrieveVersionFlags;
 import com.igeekinc.indelible.indeliblefs.events.IndelibleEventIterator;
 import com.igeekinc.indelible.indeliblefs.events.IndelibleEventSource;
 import com.igeekinc.indelible.indeliblefs.exceptions.PermissionDeniedException;
+import com.igeekinc.indelible.indeliblefs.uniblock.exceptions.SegmentExists;
 import com.igeekinc.indelible.indeliblefs.uniblock.exceptions.SegmentNotFound;
+import com.igeekinc.indelible.oid.CASCollectionID;
 import com.igeekinc.indelible.oid.CASSegmentID;
 import com.igeekinc.indelible.oid.ObjectID;
 import com.igeekinc.util.async.AsyncCompletion;
@@ -36,10 +38,10 @@ import com.igeekinc.util.async.AsyncCompletion;
 public interface CASCollectionConnection extends IndelibleEventSource
 {
 	/**
-	 * Returns the collection we're connected to
+	 * Returns the collection ID of the collection we're connected to
 	 * @return
 	 */
-	public CASCollection getCollection();
+	public CASCollectionID getCollectionID();
     /**
      * Retrieves the segment identified by this CASIdentifier (checksum)
      * @param segmentID
@@ -56,10 +58,11 @@ public interface CASCollectionConnection extends IndelibleEventSource
      * @param segmentID
      * @return
      * @throws IOException
+     * @throws SegmentNotFound 
      */
-    public DataVersionInfo retrieveSegment(ObjectID segmentID) throws IOException;
-    public Future<DataVersionInfo>retrieveSegmentAsync(ObjectID segmentID) throws IOException, SegmentNotFound;
-    public <A> void retrieveSegmentAsync(ObjectID segmentID, AsyncCompletion<DataVersionInfo, A> completionHandler, A attachment) throws IOException, SegmentNotFound;
+    public DataVersionInfo retrieveSegment(ObjectID segmentID) throws IOException, SegmentNotFound;
+    public Future<DataVersionInfo>retrieveSegmentAsync(ObjectID segmentID) throws IOException;
+    public <A> void retrieveSegmentAsync(ObjectID segmentID, AsyncCompletion<DataVersionInfo, A> completionHandler, A attachment) throws IOException;
    
     /**
      * Retrieves the specified version of the segment identified by this ObjectID
@@ -68,8 +71,9 @@ public interface CASCollectionConnection extends IndelibleEventSource
      * @param flags - Retrieves exactly the version if set to kExact.  If set to kNearest will return the first version <= specified version
      * @return
      * @throws IOException
+     * @throws SegmentNotFound 
      */
-    public DataVersionInfo retrieveSegment(ObjectID segmentID, IndelibleVersion version, RetrieveVersionFlags flags) throws IOException;
+    public DataVersionInfo retrieveSegment(ObjectID segmentID, IndelibleVersion version, RetrieveVersionFlags flags) throws IOException, SegmentNotFound;
     public Future<DataVersionInfo>retrieveSegmentAsync(ObjectID segmentID, IndelibleVersion version, RetrieveVersionFlags flags) throws IOException, SegmentNotFound;
     public <A> void retrieveSegmentAsync(ObjectID segmentID, IndelibleVersion version, RetrieveVersionFlags flags, AsyncCompletion<DataVersionInfo, A> completionHandler, A attachment) throws IOException, SegmentNotFound;
 
@@ -106,16 +110,17 @@ public interface CASCollectionConnection extends IndelibleEventSource
      */
     public CASStoreInfo storeSegment(CASIDDataDescriptor segmentDescriptor) throws IOException;
 	public Future<CASStoreInfo> storeSegmentAsync(CASIDDataDescriptor sourceDescriptor) throws IOException;
-	public <A>void storeSegmentAsync(CASIDDataDescriptor sourceDescriptor, AsyncCompletion<CASStoreInfo, ? super A>completionHandler, A attachment) throws IOException;
+	public <A>void storeSegmentAsync(CASIDDataDescriptor sourceDescriptor, AsyncCompletion<CASStoreInfo, A>completionHandler, A attachment) throws IOException;
 
     /**
      * Stores a segment with a given ObjectID.  The version will be that allocated to the current transaction
      * @param id
      * @param segmentDescriptor
      * @throws IOException
+     * @throws SegmentExists 
      * @throws NoSpaceException 
      */
-    public void storeVersionedSegment(ObjectID id, CASIDDataDescriptor segmentDescriptor) throws IOException;
+    public void storeVersionedSegment(ObjectID id, CASIDDataDescriptor segmentDescriptor) throws IOException, SegmentExists;
     
     /**
      * Release the segment referred to by the ID.  If all segments referring to a particular CASIdentifier are released, the
@@ -124,7 +129,7 @@ public interface CASCollectionConnection extends IndelibleEventSource
      * @return true if the releaseID was in the collection, false if the releaseID was not found
      * @throws IOException
      */
-    public boolean releaseSegment(CASSegmentID releaseID) throws IOException;
+    public boolean releaseSegment(ObjectID releaseID) throws IOException;
     
     /**
      * Release the segments referred to by the ID.  If all segments referring to a particular CASIdentifier are released, the
@@ -157,11 +162,13 @@ public interface CASCollectionConnection extends IndelibleEventSource
 	
     public String [] listMetaDataNames() throws PermissionDeniedException, IOException;
 	
-    public HashMap<String, Serializable> getMetaDataResource(String mdResourceName) 
+    public Map<String, Serializable> getMetaDataResource(String mdResourceName) 
     		throws PermissionDeniedException, IOException;
 
-    public void setMetaDataResource(String mdResourceName, HashMap<String, Serializable> resource)
+    public void setMetaDataResource(String mdResourceName, Map<String, Serializable> resource)
     		throws PermissionDeniedException, IOException;
+    
+    public void removeMetaDataResouce(String mdResourceName) throws PermissionDeniedException, IOException;
     
     public CASServer getCASServer();
     
@@ -189,7 +196,7 @@ public interface CASCollectionConnection extends IndelibleEventSource
 	public void storeReplicatedSegment(ObjectID replicateSegmentID, IndelibleVersion replicateVersion, CASIDDataDescriptor sourceDescriptor, CASCollectionEvent curCASEvent) throws IOException;
 	
 	public Future<Void> storeReplicatedSegmentAsync(ObjectID replicateSegmentID, IndelibleVersion replicateVersion, CASIDDataDescriptor sourceDescriptor, CASCollectionEvent curCASEvent) throws IOException;
-	public <A>void storeReplicatedSegmentAsync(ObjectID replicateSegmentID, IndelibleVersion replicateVersion, CASIDDataDescriptor sourceDescriptor, CASCollectionEvent curCASEvent, AsyncCompletion<Void, ? super A>completionHandler, A attachment) throws IOException;
+	public <A>void storeReplicatedSegmentAsync(ObjectID replicateSegmentID, IndelibleVersion replicateVersion, CASIDDataDescriptor sourceDescriptor, CASCollectionEvent curCASEvent, AsyncCompletion<Void, A>completionHandler, A attachment) throws IOException;
 	public CASIDDataDescriptor getMetaDataForReplication() throws IOException;
 	public void replicateMetaDataResource(CASIDDataDescriptor sourceMetaData,
 			CASCollectionEvent curCASEvent) throws IOException;

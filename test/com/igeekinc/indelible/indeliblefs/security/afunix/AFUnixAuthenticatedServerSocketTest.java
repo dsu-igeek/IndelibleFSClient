@@ -30,8 +30,8 @@ import junit.framework.TestCase;
 import org.apache.log4j.Logger;
 import org.newsclub.net.unix.AFUNIXSocketAddress;
 
-import com.igeekinc.indelible.indeliblefs.IndelibleFSClient;
 import com.igeekinc.indelible.indeliblefs.IndelibleFSClientPreferences;
+import com.igeekinc.indelible.indeliblefs.firehose.IndelibleFSClient;
 import com.igeekinc.indelible.indeliblefs.security.EntityAuthenticationClient;
 import com.igeekinc.indelible.indeliblefs.security.EntityAuthenticationServer;
 import com.igeekinc.indelible.oid.EntityID;

@@ -30,13 +30,13 @@ import java.util.HashMap;
 
 import org.apache.log4j.Logger;
 
-import com.igeekinc.indelible.indeliblefs.IndelibleFSClient;
-import com.igeekinc.indelible.indeliblefs.IndelibleFSServerAddedEvent;
-import com.igeekinc.indelible.indeliblefs.IndelibleFSServerListListener;
-import com.igeekinc.indelible.indeliblefs.IndelibleFSServerRemovedEvent;
+import com.igeekinc.indelible.indeliblefs.IndelibleFSServer;
 import com.igeekinc.indelible.indeliblefs.exceptions.PermissionDeniedException;
 import com.igeekinc.indelible.indeliblefs.exceptions.VolumeNotFoundException;
-import com.igeekinc.indelible.indeliblefs.proxies.IndelibleFSServerProxy;
+import com.igeekinc.indelible.indeliblefs.firehose.IndelibleFSClient;
+import com.igeekinc.indelible.indeliblefs.firehose.IndelibleFSServerAddedEvent;
+import com.igeekinc.indelible.indeliblefs.firehose.IndelibleFSServerListListener;
+import com.igeekinc.indelible.indeliblefs.firehose.IndelibleFSServerRemovedEvent;
 import com.igeekinc.indelible.indeliblefs.remote.IndelibleFileNodeRemote;
 import com.igeekinc.indelible.indeliblefs.security.AuthenticationFailureException;
 import com.igeekinc.indelible.oid.EntityID;
@@ -55,15 +55,15 @@ public class IndelibleListServers extends IndelibleFSUtilBase
     
     public void runApp() throws RemoteException, PermissionDeniedException, IOException, VolumeNotFoundException
     {
-    	IndelibleFSServerProxy [] servers = IndelibleFSClient.listServers();
-        HashMap<EntityID, ArrayList<IndelibleFSServerProxy>>serversByAuthenticationServer = new HashMap<EntityID, ArrayList<IndelibleFSServerProxy>>();
-        for (IndelibleFSServerProxy curServer:servers)
+    	IndelibleFSServer [] servers = IndelibleFSClient.listServers();
+        HashMap<EntityID, ArrayList<IndelibleFSServer>>serversByAuthenticationServer = new HashMap<EntityID, ArrayList<IndelibleFSServer>>();
+        for (IndelibleFSServer curServer:servers)
         {
         	EntityID securityServerID = curServer.getSecurityServerID();
-        	ArrayList<IndelibleFSServerProxy>serverList = serversByAuthenticationServer.get(securityServerID);
+        	ArrayList<IndelibleFSServer>serverList = serversByAuthenticationServer.get(securityServerID);
         	if (serverList == null)
         	{
-        		serverList = new ArrayList<IndelibleFSServerProxy>();
+        		serverList = new ArrayList<IndelibleFSServer>();
         		serversByAuthenticationServer.put(securityServerID, serverList);
         	}
         	serverList.add(curServer);
@@ -72,8 +72,8 @@ public class IndelibleListServers extends IndelibleFSUtilBase
         {
         	System.out.println("====================");
         	System.out.println("Security server: "+curSecurityServerID.toString());
-        	ArrayList<IndelibleFSServerProxy>serverList = serversByAuthenticationServer.get(curSecurityServerID);
-        	for (IndelibleFSServerProxy curServer:serverList)
+        	ArrayList<IndelibleFSServer>serverList = serversByAuthenticationServer.get(curSecurityServerID);
+        	for (IndelibleFSServer curServer:serverList)
         	{
         		printServer(curServer);
         	}
@@ -126,7 +126,7 @@ public class IndelibleListServers extends IndelibleFSUtilBase
         System.exit(0);
     }
 
-	protected void printServer(IndelibleFSServerProxy curServer)
+	protected void printServer(IndelibleFSServer curServer)
 			throws RemoteException
 	{
 		System.out.println("--------------------");

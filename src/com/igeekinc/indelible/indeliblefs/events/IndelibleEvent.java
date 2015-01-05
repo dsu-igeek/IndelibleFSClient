@@ -26,14 +26,14 @@ import com.igeekinc.indelible.oid.EntityID;
  * by the EntityID (server) that generated the event, a 64 bit event number and a 64 bit timestamp
  *
  */
-public class IndelibleEvent implements Serializable
+public abstract class IndelibleEvent implements Serializable
 {
 	private static final long	serialVersionUID	= 3214244008481514727L;
 	private EntityID	source;
 	private long		eventID;
 	private long		timestamp;
 	
-	protected IndelibleEvent(EntityID source, long eventID, long timestamp)
+	public IndelibleEvent(EntityID source, long eventID, long timestamp)
 	{
 		this.source = source;
 		this.eventID = eventID;

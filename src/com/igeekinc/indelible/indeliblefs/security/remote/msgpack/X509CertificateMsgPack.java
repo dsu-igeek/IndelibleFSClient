@@ -36,11 +36,16 @@ public class X509CertificateMsgPack
 	
 	public X509CertificateMsgPack(X509Certificate certificate) throws CertificateEncodingException
 	{
-		x509CertificateBytes = certificate.getEncoded();
+		if (certificate != null)
+			x509CertificateBytes = certificate.getEncoded();
+		else
+			x509CertificateBytes = new byte[0];
 	}
 	
 	public X509Certificate getX509Certificate() throws CertificateException
 	{
-		return (X509Certificate) CertificateFactory.getInstance("X.509").generateCertificate(new ByteArrayInputStream(x509CertificateBytes));
+		if (x509CertificateBytes != null && x509CertificateBytes.length > 0)
+			return (X509Certificate) CertificateFactory.getInstance("X.509").generateCertificate(new ByteArrayInputStream(x509CertificateBytes));
+		return null;
 	}
 }

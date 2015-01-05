@@ -18,8 +18,8 @@ package com.igeekinc.indelible.indeliblefs.core;
 
 import java.io.Serializable;
 
-import com.igeekinc.indelible.indeliblefs.uniblock.CASServer;
 import com.igeekinc.indelible.indeliblefs.uniblock.CASServerConnectionIF;
+import com.igeekinc.indelible.indeliblefs.uniblock.LocalCASServer;
 
 /**
  * IndelibleVersion uniquely identifies a version within an Indelible FS.
@@ -40,7 +40,7 @@ import com.igeekinc.indelible.indeliblefs.uniblock.CASServerConnectionIF;
 public class IndelibleVersion implements Serializable
 {
     private static final long serialVersionUID = 7310059182792116750L;
-    private transient CASServer versionManager;
+    private transient LocalCASServer<CASServerConnectionIF> versionManager;
     private transient CASServerConnectionIF connection;
     private transient long versionID;
     private long versionTime;
@@ -48,7 +48,7 @@ public class IndelibleVersion implements Serializable
     
     public static final IndelibleVersion kLatestVersion = new IndelibleVersion(-1, Long.MAX_VALUE, Integer.MAX_VALUE);
     
-    public IndelibleVersion(CASServer versionManager, CASServerConnectionIF connection, long versionID)
+    public IndelibleVersion(LocalCASServer<CASServerConnectionIF> versionManager, CASServerConnectionIF connection, long versionID)
     {
         this.versionManager = versionManager;
         this.connection = connection;

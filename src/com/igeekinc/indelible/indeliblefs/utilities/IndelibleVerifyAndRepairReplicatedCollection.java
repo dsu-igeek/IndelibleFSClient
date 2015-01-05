@@ -33,13 +33,14 @@ import java.util.ArrayList;
 import org.apache.log4j.Level;
 import org.apache.log4j.Logger;
 
-import com.igeekinc.indelible.indeliblefs.IndelibleFSClient;
+import com.igeekinc.indelible.indeliblefs.IndelibleFSServer;
 import com.igeekinc.indelible.indeliblefs.core.IndelibleFSTransaction;
 import com.igeekinc.indelible.indeliblefs.core.IndelibleVersion;
 import com.igeekinc.indelible.indeliblefs.core.RetrieveVersionFlags;
 import com.igeekinc.indelible.indeliblefs.events.IndelibleEvent;
 import com.igeekinc.indelible.indeliblefs.events.IndelibleEventIterator;
-import com.igeekinc.indelible.indeliblefs.proxies.IndelibleFSServerProxy;
+import com.igeekinc.indelible.indeliblefs.exceptions.PermissionDeniedException;
+import com.igeekinc.indelible.indeliblefs.firehose.IndelibleFSClient;
 import com.igeekinc.indelible.indeliblefs.security.AuthenticationFailureException;
 import com.igeekinc.indelible.indeliblefs.uniblock.CASCollectionConnection;
 import com.igeekinc.indelible.indeliblefs.uniblock.CASCollectionEvent;
@@ -50,6 +51,7 @@ import com.igeekinc.indelible.indeliblefs.uniblock.DataVersionInfo;
 import com.igeekinc.indelible.indeliblefs.uniblock.SegmentInfo;
 import com.igeekinc.indelible.indeliblefs.uniblock.TransactionCommittedEvent;
 import com.igeekinc.indelible.indeliblefs.uniblock.exceptions.CollectionNotFoundException;
+import com.igeekinc.indelible.indeliblefs.uniblock.exceptions.SegmentNotFound;
 import com.igeekinc.indelible.oid.CASCollectionID;
 import com.igeekinc.indelible.oid.EntityID;
 import com.igeekinc.indelible.oid.ObjectID;
@@ -160,9 +162,9 @@ public class IndelibleVerifyAndRepairReplicatedCollection extends IndelibleFSUti
     		}
         }
         
-        IndelibleFSServerProxy masterServer = null, checkServer = null;
-        IndelibleFSServerProxy [] servers = IndelibleFSClient.listServers();
-        for (IndelibleFSServerProxy curServer:servers)
+        IndelibleFSServer masterServer = null, checkServer = null;
+        IndelibleFSServer [] servers = IndelibleFSClient.listServers();
+        for (IndelibleFSServer curServer:servers)
         {
         	try
 			{
@@ -189,19 +191,21 @@ public class IndelibleVerifyAndRepairReplicatedCollection extends IndelibleFSUti
 			verify(casCollectionID, masterServer, checkServer, repair);
 		} catch (IOException e)
 		{
-			// TODO Auto-generated catch block
+			Logger.getLogger(getClass()).error(new ErrorLogMessage("Caught exception"), e);
+		} catch (PermissionDeniedException e)
+		{
 			Logger.getLogger(getClass()).error(new ErrorLogMessage("Caught exception"), e);
 		}
     }
     
-    private void verify(CASCollectionID casCollectionID, IndelibleFSServerProxy masterServer, IndelibleFSServerProxy checkServer, boolean repair) throws IOException
+    private void verify(CASCollectionID casCollectionID, IndelibleFSServer masterServer, IndelibleFSServer checkServer, boolean repair) throws IOException, PermissionDeniedException
     {
     	CASServerConnectionIF masterCASServerConn = masterServer.openCASServer();
     	CASServerConnectionIF checkCASServerConn = checkServer.openCASServer();
     	CASCollectionConnection masterCASConn, checkCASConn;
     	try
 		{
-    		masterCASConn = masterCASServerConn.getCollectionConnection(casCollectionID);
+    		masterCASConn = masterCASServerConn.openCollectionConnection(casCollectionID);
 		} catch (CollectionNotFoundException e)
 		{
 			System.err.println("Could not find "+casCollectionID+" in master server");
@@ -209,7 +213,7 @@ public class IndelibleVerifyAndRepairReplicatedCollection extends IndelibleFSUti
 		}
     	try
 		{
-    		checkCASConn = checkCASServerConn.getCollectionConnection(casCollectionID);
+    		checkCASConn = checkCASServerConn.openCollectionConnection(casCollectionID);
 		} catch (CollectionNotFoundException e)
 		{
 			System.err.println("Could not find "+casCollectionID+" in check server");
@@ -278,8 +282,14 @@ public class IndelibleVerifyAndRepairReplicatedCollection extends IndelibleFSUti
     									logger.error(new ErrorLogMessage("Data does not verify on check server for segment {0}", checkSegmentID));
     									if (repair)
     									{
-    										DataVersionInfo masterData = masterCASConn.retrieveSegment(checkSegmentID, transactionVersion, RetrieveVersionFlags.kExact);
-    										checkCASConn.repairSegment(checkSegmentID, transactionVersion, masterData);
+    										try
+											{
+												DataVersionInfo masterData = masterCASConn.retrieveSegment(checkSegmentID, transactionVersion, RetrieveVersionFlags.kExact);
+												checkCASConn.repairSegment(checkSegmentID, transactionVersion, masterData);
+											} catch (SegmentNotFound e)
+											{
+												Logger.getLogger(getClass()).error(new ErrorLogMessage("Caught exception"), e);
+											}
     									}
     								}
     							}
@@ -295,6 +305,10 @@ public class IndelibleVerifyAndRepairReplicatedCollection extends IndelibleFSUti
     						break;
     					case kSegmentReleased:
     						break;
+						case kTransactionCommited:
+							break;
+						default:
+							break;
     					}
     				}
     				numEventsChecked++;

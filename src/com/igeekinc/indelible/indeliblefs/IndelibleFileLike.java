@@ -22,6 +22,9 @@ import java.io.OutputStream;
 import java.rmi.RemoteException;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.Map;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Future;
 
 import org.apache.log4j.Logger;
 
@@ -43,6 +46,8 @@ public class IndelibleFileLike implements FileLike
 	private IndelibleFileNodeIF wrappedNode;
 	private FilePath path;
 	private HashMap<String, IndelibleNodeInfo> nodeInfoMap;
+	private Future<IndelibleNodeInfo []>nodeInfoFuture;
+	
 	public IndelibleFileLike(FilePath path, IndelibleFileNodeIF wrappedNode) throws RemoteException, PermissionDeniedException, IOException
 	{
 		if (path == null)
@@ -53,12 +58,7 @@ public class IndelibleFileLike implements FileLike
 		this.path = path;
 		if (wrappedNode.isDirectory())
 		{
-			IndelibleNodeInfo [] nodeInfo = ((IndelibleDirectoryNodeIF)wrappedNode).getChildNodeInfo(new String[]{kClientFileMetaDataPropertyName});
-			nodeInfoMap = new HashMap<String, IndelibleNodeInfo>();
-			for (IndelibleNodeInfo curNodeInfo:nodeInfo)
-			{
-				nodeInfoMap.put(curNodeInfo.getName(), curNodeInfo);
-			}
+			nodeInfoFuture = ((IndelibleDirectoryNodeIF)wrappedNode).getChildNodeInfoAsync(new String[]{kClientFileMetaDataPropertyName});
 		}
 	}
 	
@@ -227,7 +227,7 @@ public class IndelibleFileLike implements FileLike
 	public ClientFileMetaData getMetaData() throws IOException
 	{
 		//destFile.setMetaDataResource(kClientFileMetaDataPropertyName, metaData.getProperties().getMap());
-		HashMap<String, Object> mdMap;
+		Map<String, Object> mdMap;
 		try
 		{
 			mdMap = wrappedNode.getMetaDataResource(kClientFileMetaDataPropertyName);
@@ -245,8 +245,33 @@ public class IndelibleFileLike implements FileLike
 	{
 		ClientFileMetaData returnMD = null;
 
-		HashMap<String, Object> mdMap = null;
-
+		Map<String, Object> mdMap = null;
+		synchronized(nodeInfoFuture)
+		{
+			if (nodeInfoMap == null)
+			{
+				IndelibleNodeInfo[] nodeInfo;
+				try
+				{
+					nodeInfo = nodeInfoFuture.get();
+				} catch (InterruptedException e)
+				{
+					Logger.getLogger(getClass()).error(new ErrorLogMessage("Caught exception"), e);
+					throw new IOException("Interrupted while retriving nodeInfo");
+				} catch (ExecutionException e)
+				{
+					Logger.getLogger(getClass()).error(new ErrorLogMessage("Caught exception"), e);
+					if (e.getCause() instanceof IOException)
+						throw (IOException)e.getCause();
+					throw new IOException("Got exception "+e.getCause().getMessage());
+				}
+				nodeInfoMap = new HashMap<String, IndelibleNodeInfo>();
+				for (IndelibleNodeInfo curNodeInfo:nodeInfo)
+				{
+					nodeInfoMap.put(curNodeInfo.getName(), curNodeInfo);
+				}
+			}
+		}
 		IndelibleNodeInfo allMDForChild = nodeInfoMap.get(childName);
 		if (allMDForChild != null)
 			mdMap = allMDForChild.getMetaData(kClientFileMetaDataPropertyName);

@@ -18,6 +18,7 @@ package com.igeekinc.indelible.indeliblefs.security.remote.msgpack;
 
 import java.security.cert.CertificateEncodingException;
 import java.security.cert.CertificateException;
+import java.security.cert.X509Certificate;
 
 import org.msgpack.annotation.Message;
 
@@ -35,11 +36,20 @@ public class AuthenticateServerReplyMessage
 	
 	public AuthenticateServerReplyMessage(EntityAuthentication authentication) throws CertificateEncodingException
 	{
-		authenticatedCert = new X509CertificateMsgPack(authentication.getCertificate());
+		X509Certificate certificate = null;
+		if (authentication != null)
+			certificate = authentication.getCertificate();
+		authenticatedCert = new X509CertificateMsgPack(certificate);
 	}
 	
 	public EntityAuthentication getEntityAuthentication() throws CertificateException
 	{
-		return new EntityAuthentication(authenticatedCert.getX509Certificate());
+		if (authenticatedCert != null)
+		{
+			X509Certificate x509Certificate = authenticatedCert.getX509Certificate();
+			if (x509Certificate != null)
+				return new EntityAuthentication(x509Certificate);
+		}
+		return null;
 	}
 }

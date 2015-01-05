@@ -29,6 +29,7 @@ import java.security.SignatureException;
 import java.security.UnrecoverableKeyException;
 import java.security.cert.CertificateException;
 import java.util.HashMap;
+import java.util.Map;
 
 import org.apache.log4j.Logger;
 
@@ -133,7 +134,7 @@ public class IndelibleSetVolumeProperties extends IndelibleFSUtilBase
         }
         try
         {
-            HashMap<String, Object>curMDProperties = volume.getMetaDataResource(metadataName);
+            Map<String, Object>curMDProperties = volume.getMetaDataResource(metadataName);
             if (curMDProperties == null)
             	curMDProperties = new HashMap<String, Object>();
             for (String curKey:properties.keySet())

@@ -33,7 +33,7 @@ public interface IndelibleFSForkIF
 	public abstract CASIDDataDescriptor getDataDescriptor(long offset, long length) throws IOException;
 
 	public abstract Future<CASIDDataDescriptor>getDataDescriptorAsync(long offset, long length) throws IOException;
-	public abstract <A> void getDataDescriptorAsync(long offset, long length, AsyncCompletion<Void, A>completionHandler, A attachment) throws IOException;
+	public abstract <A> void getDataDescriptorAsync(long offset, long length, AsyncCompletion<CASIDDataDescriptor, A>completionHandler, A attachment) throws IOException;
 	
 	/* (non-Javadoc)
 	 * @see com.igeekinc.indelible.indeliblefs.core.IndelibleFSForkRemote#read(long, byte[])
@@ -72,11 +72,14 @@ public interface IndelibleFSForkIF
 	 */
 	public abstract void appendDataDescriptor(CASIDDataDescriptor source)
 			throws IOException;
-
+	public abstract Future<Void>appendDataDescriptorAsync(CASIDDataDescriptor source) throws IOException;
+	public abstract <A> void appendDataDescriptorAsync(CASIDDataDescriptor source, AsyncCompletion<Void, A>completionHandler, A attachment) throws IOException;
 	/* (non-Javadoc)
 	 * @see com.igeekinc.indelible.indeliblefs.core.IndelibleFSForkRemote#append(byte[])
 	 */
 	public abstract void append(byte[] source) throws IOException;
+	
+	public abstract void append(ByteBuffer source) throws IOException;
 
 	/* (non-Javadoc)
 	 * @see com.igeekinc.indelible.indeliblefs.core.IndelibleFSForkRemote#append(byte[], int, int)
@@ -110,6 +113,6 @@ public interface IndelibleFSForkIF
 
 	public abstract CASIdentifier[] getSegmentIDs() throws IOException;
 
-	public abstract String getName();
+	public abstract String getName() throws IOException;
 
 }

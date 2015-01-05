@@ -31,6 +31,7 @@ import java.util.Date;
 
 import com.igeekinc.indelible.indeliblefs.events.IndelibleEvent;
 import com.igeekinc.indelible.indeliblefs.events.IndelibleEventIterator;
+import com.igeekinc.indelible.indeliblefs.exceptions.PermissionDeniedException;
 import com.igeekinc.indelible.indeliblefs.security.AuthenticationFailureException;
 import com.igeekinc.indelible.indeliblefs.uniblock.CASCollectionConnection;
 import com.igeekinc.indelible.indeliblefs.uniblock.CASServerConnectionIF;
@@ -97,12 +98,13 @@ public class IndelibleListEventsForTransaction extends IndelibleFSUtilBase
 	 * @param args
 	 * @throws CollectionNotFoundException 
 	 * @throws IOException 
+	 * @throws PermissionDeniedException 
 	 */
-	public void runApp() throws CollectionNotFoundException, IOException
+	public void runApp() throws CollectionNotFoundException, IOException, PermissionDeniedException
 	{
 		 
 	    	CASServerConnectionIF serverConn = fsServer.openCASServer();
-	        CASCollectionConnection collectionConnection = serverConn.getCollectionConnection(collectionID);
+	        CASCollectionConnection collectionConnection = serverConn.openCollectionConnection(collectionID);
 	        IndelibleEventIterator transactionIterator = collectionConnection.getTransactionEventsAfterEventID(transactionEventID, 0);
 	        if (transactionIterator.hasNext())
 	        {

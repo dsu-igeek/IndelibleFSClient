@@ -27,8 +27,8 @@ import java.security.SignatureException;
 import java.security.UnrecoverableKeyException;
 import java.security.cert.CertificateEncodingException;
 import java.security.cert.CertificateParsingException;
-import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.Map;
 
 import javax.net.ssl.SSLPeerUnverifiedException;
 
@@ -45,6 +45,8 @@ import com.igeekinc.indelible.oid.EntityID;
 import com.igeekinc.indelible.oid.NetworkDataDescriptorID;
 import com.igeekinc.indelible.oid.ObjectID;
 import com.igeekinc.indelible.oid.ObjectIDFactory;
+import com.igeekinc.util.EthernetID;
+import com.igeekinc.util.SystemInfo;
 import com.igeekinc.util.datadescriptor.BasicDataDescriptor;
 import com.igeekinc.util.datadescriptor.DataDescriptor;
 import com.igeekinc.util.logging.ErrorLogMessage;
@@ -88,12 +90,15 @@ public class DataMoverSession
     DataMoverSource parentMover;
     protected HashMap<NetworkDataDescriptorID, DataDescriptor> inUseDescriptors = new HashMap<NetworkDataDescriptorID,DataDescriptor>();
     protected ObjectIDFactory oidFactory;
+    protected EthernetID hostID;
+    
     protected DataMoverSession(DataMoverSessionID sessionID, EntityID securityServerID, DataMoverSource parentMover, ObjectIDFactory oidFactory)
     {
         this.sessionID = sessionID;
         this.securityServerID = securityServerID;
         this.parentMover = parentMover;
         this.oidFactory = oidFactory;
+        this.hostID = SystemInfo.getSystemInfo().getEthernetID();
     }
     
     public ObjectID getSessionID()
@@ -132,15 +137,19 @@ public class DataMoverSession
 
         InetSocketAddress[] networkPorts;
         if (availability == DataDescriptorAvailability.kAllAccess || availability == DataDescriptorAvailability.kNetworkOnlyAccess)
-        	networkPorts = parentMover.getHostPorts(securityServerID);
+        	networkPorts = parentMover.getListenNetworkAddresses(securityServerID);
         else
         	networkPorts = new InetSocketAddress[0];
 		File localSocketFile = null;
 		if (availability == DataDescriptorAvailability.kAllAccess || availability == DataDescriptorAvailability.kLocalOnlyAccess)
+		{
 			localSocketFile = parentMover.getLocalSocket(securityServerID);
+			if (availability == DataDescriptorAvailability.kLocalOnlyAccess && localSocketFile == null)
+				throw new IllegalArgumentException("No local access");
+		}
 		NetworkDataDescriptor returnDescriptor = new NetworkDataDescriptor(parentMover.getEntityID(), securityServerID, sessionID, noid, 
-                casIdentifier, localDataDescriptor.getLength(), networkPorts,
-                localSocketFile, originalDescriptor);
+                casIdentifier, localDataDescriptor.getLength(), hostID, networkPorts,
+                localSocketFile, originalDescriptor, true);
         // For small sizes we return the data in the descriptor.  No need to register it
         if (returnDescriptor.getShareableDescriptor() == null || (!(returnDescriptor.getShareableDescriptor() instanceof CASIDMemoryDataDescriptor)))
         {
@@ -213,7 +222,10 @@ public class DataMoverSession
     }
     public void close()
     {
-        inUseDescriptors.clear();
+    	synchronized(inUseDescriptors)
+    	{
+    		inUseDescriptors.clear();
+    	}
         parentMover.closeSession(this);
     }
 
@@ -256,5 +268,41 @@ public class DataMoverSession
     	{
     		return inUseDescriptors.size();
     	}
+    }
+    
+    @SuppressWarnings("unchecked")
+	public String dump()
+    {
+    	StringBuffer returnBuffer = new StringBuffer();
+        returnBuffer.append("DataMoverSession sessionID = ");
+        returnBuffer.append(sessionID.toString());
+        returnBuffer.append(", securityServerID = ");
+        returnBuffer.append(securityServerID.toString());
+        returnBuffer.append(", hostID = ");
+        returnBuffer.append(hostID.toString());
+        returnBuffer.append("\n");
+        Map.Entry<NetworkDataDescriptorID, DataDescriptor>[] inUseEntries;
+		synchronized (inUseDescriptors)
+		{
+			inUseEntries = inUseDescriptors.entrySet().toArray(new Map.Entry[0]);
+		}
+        returnBuffer.append("In Use Descriptors:\n");
+        for (Map.Entry<NetworkDataDescriptorID, DataDescriptor> curEntry:inUseEntries)
+        {
+        	returnBuffer.append("NDDI = "+curEntry.getKey().toString());
+        	returnBuffer.append(" size = ");
+        	returnBuffer.append(curEntry.getValue().getLength());
+        	returnBuffer.append(", hash = ");
+            if (curEntry.getValue() instanceof CASIDDataDescriptor)
+            {
+                returnBuffer.append(((CASIDDataDescriptor)curEntry.getValue()).getCASIdentifier());
+            }
+            else
+            {
+            	returnBuffer.append(" N/A");
+            }
+            returnBuffer.append("\n");
+        }
+    	return returnBuffer.toString();
     }
 }

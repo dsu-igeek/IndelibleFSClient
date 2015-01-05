@@ -19,13 +19,13 @@ package com.igeekinc.indelible.indeliblefs.server;
 import java.rmi.Remote;
 import java.rmi.RemoteException;
 
-import com.igeekinc.indelible.oid.CASSegmentID;
+import com.igeekinc.indelible.oid.ObjectID;
 
 public interface RemoteCASSegmentIDIterator extends Remote
 {
 	  public boolean hasNext() throws RemoteException;
 
-	  public CASSegmentID next() throws RemoteException;
+	  public ObjectID next() throws RemoteException;
 
 	  public void remove() throws RemoteException;
 	  

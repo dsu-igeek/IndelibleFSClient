@@ -17,7 +17,6 @@
 package com.igeekinc.indelible.indeliblefs.security;
 
 import java.io.IOException;
-import java.net.Socket;
 import java.net.SocketAddress;
 import java.nio.channels.SocketChannel;
 import java.rmi.RemoteException;
@@ -31,24 +30,26 @@ import java.security.UnrecoverableKeyException;
 import java.security.cert.Certificate;
 import java.security.cert.CertificateEncodingException;
 import java.security.cert.CertificateException;
+import java.security.cert.CertificateExpiredException;
+import java.security.cert.CertificateNotYetValidException;
 import java.security.cert.CertificateParsingException;
 import java.security.cert.X509Certificate;
 import java.util.concurrent.ExecutionException;
 
 import javax.net.ssl.SSLContext;
-import javax.net.ssl.SSLEngine;
 import javax.net.ssl.X509TrustManager;
 
 import org.apache.log4j.Logger;
-import org.newsclub.net.unix.AFUNIXSocketAddress;
-import org.newsclub.net.unix.AFUNIXSocketChannelImpl;
 
-import com.igeekinc.firehose.CommandMessage;
 import com.igeekinc.firehose.FirehoseClient;
+import com.igeekinc.firehose.FirehoseInitiator;
+import com.igeekinc.firehose.SSLSetup;
 import com.igeekinc.indelible.indeliblefs.security.remote.msgpack.AuthenticateServerMessage;
 import com.igeekinc.indelible.indeliblefs.security.remote.msgpack.AuthenticateServerReplyMessage;
 import com.igeekinc.indelible.indeliblefs.security.remote.msgpack.GetEntityIDMessage;
 import com.igeekinc.indelible.indeliblefs.security.remote.msgpack.GetEntityIDReplyMessage;
+import com.igeekinc.indelible.indeliblefs.security.remote.msgpack.GetServerCertificateMessage;
+import com.igeekinc.indelible.indeliblefs.security.remote.msgpack.GetServerCertificateReplyMessage;
 import com.igeekinc.indelible.indeliblefs.security.remote.msgpack.RegisterServerMessage;
 import com.igeekinc.indelible.oid.EntityID;
 import com.igeekinc.util.async.ComboFutureBase;
@@ -61,7 +62,8 @@ public class EntityAuthenticationServerFirehoseClient extends FirehoseClient imp
 	{
 		kRegisterServerCommand(1),
 		kAuthenticateServerCommand(2),
-		kGetEntityID(3);
+		kGetEntityID(3),
+		kGetServerCertificate(4);
 		
 		int commandNum;
 		private EntityAuthenticationCommand(int commandNum)
@@ -84,19 +86,17 @@ public class EntityAuthenticationServerFirehoseClient extends FirehoseClient imp
 				return kAuthenticateServerCommand;
 			case 3:
 				return kGetEntityID;
+			case 4:
+				return kGetServerCertificate;
 			}
 			throw new IllegalArgumentException();
 		}
 	}
+	
+	private SSLContext sslContext;
+	private EntityID cachedEntityID = null;
 	public EntityAuthenticationServerFirehoseClient(SocketAddress address) throws IOException
 	{
-		socket = new Socket();
-		if (address instanceof AFUNIXSocketAddress)
-			socketChannel = AFUNIXSocketChannelImpl.open((AFUNIXSocketAddress)address);
-		else
-			socketChannel = SocketChannel.open(address);
-		socket = socketChannel.socket();
-		SSLContext sslContext;
 		try
 		{
 			sslContext = SSLContext.getInstance("TLS");
@@ -106,9 +106,21 @@ public class EntityAuthenticationServerFirehoseClient extends FirehoseClient imp
 			Logger.getLogger(getClass()).error(new ErrorLogMessage("Caught exception"), e);
 			throw new IOException("Could not initialize SSL Context");
 		} 
-		SSLEngine sslEngine = sslContext.createSSLEngine();
-		sslEngine.setUseClientMode(true);
-		createResponseLoop(sslEngine);
+		FirehoseInitiator.initiateClient(address, this, new SSLSetup()
+		{
+			
+			@Override
+			public boolean useSSL()
+			{
+				return true;
+			}
+			
+			@Override
+			public SSLContext getSSLContextForSocket(SocketChannel socket) throws IOException
+			{
+				return EntityAuthenticationServerFirehoseClient.this.sslContext;
+			}
+		});
 	}
 	
 	@Override
@@ -122,7 +134,7 @@ public class EntityAuthenticationServerFirehoseClient extends FirehoseClient imp
 		
 		try
 		{
-			sendMessage(addCommand, future);
+			sendMessage(addCommand, future, null);
 			future.get();
 		} 
 		catch (ExecutionException ee)
@@ -176,14 +188,14 @@ public class EntityAuthenticationServerFirehoseClient extends FirehoseClient imp
 			InvalidKeyException, IllegalStateException,
 			NoSuchProviderException, NoSuchAlgorithmException,
 			SignatureException, UnrecoverableKeyException, KeyStoreException,
-			RemoteException, IOException, CertificateParsingException
+			RemoteException, IOException, CertificateParsingException, AuthenticationFailureException, ServerNotRegisteredException
 	{
 		AuthenticateServerMessage authenticateCommand = new AuthenticateServerMessage(serverID, encodedCertReq);
 		ComboFutureBase<AuthenticateServerReplyMessage>future = new ComboFutureBase<AuthenticateServerReplyMessage>();
 
 		try
 		{
-			sendMessage(authenticateCommand, future);
+			sendMessage(authenticateCommand, future, null);
 			AuthenticateServerReplyMessage replyMessage = future.get();
 			return replyMessage.getEntityAuthentication();
 		} 
@@ -229,6 +241,14 @@ public class EntityAuthenticationServerFirehoseClient extends FirehoseClient imp
 			{
 				throw e;
 			}
+			catch (AuthenticationFailureException e)
+			{
+				throw e;
+			}
+			catch (ServerNotRegisteredException e)
+			{
+				throw e;
+			}
 			catch (Throwable e)
 			{
 				throw new InternalError("Could not execute");
@@ -251,29 +271,14 @@ public class EntityAuthenticationServerFirehoseClient extends FirehoseClient imp
 	public Certificate getServerCertificate() throws KeyStoreException,
 			RemoteException
 	{
-		// TODO Auto-generated method stub
-		return null;
-	}
-
-	@Override
-	public byte[] entityAuthenticationServerChallenge(byte[] bytesToSign)
-			throws RemoteException
-	{
-		// TODO Auto-generated method stub
-		return null;
-	}
-
-	@Override
-	public EntityID getEntityID() throws RemoteException
-	{
-		GetEntityIDMessage getEntityIDMessage = new GetEntityIDMessage();
-		ComboFutureBase<GetEntityIDReplyMessage>future = new ComboFutureBase<GetEntityIDReplyMessage>();
+		GetServerCertificateMessage getEntityIDMessage = new GetServerCertificateMessage();
+		ComboFutureBase<GetServerCertificateReplyMessage>future = new ComboFutureBase<GetServerCertificateReplyMessage>();
 
 		try
 		{
-			sendMessage(getEntityIDMessage, future);
-			GetEntityIDReplyMessage replyMessage = future.get();
-			return replyMessage.getEntityID();
+			sendMessage(getEntityIDMessage, future, null);
+			GetServerCertificateReplyMessage replyMessage = future.get();
+			return replyMessage.getServerCertificate();
 		} 
 		catch (ExecutionException ee)
 		{
@@ -297,15 +302,61 @@ public class EntityAuthenticationServerFirehoseClient extends FirehoseClient imp
 		catch (IOException e)
 		{
 			throw new RemoteException();
+		} catch (CertificateException e)
+		{
+			Logger.getLogger(getClass()).error(new ErrorLogMessage("Caught exception"), e);
+			throw new RemoteException();
 		} 
 	}
 
 	@Override
-	protected Class<? extends CommandMessage> getClassForCommandCode(
-			int commandCode)
+	public byte[] entityAuthenticationServerChallenge(byte[] bytesToSign)
+			throws RemoteException
 	{
 		// TODO Auto-generated method stub
 		return null;
+	}
+
+	@Override
+	public EntityID getEntityID() throws RemoteException
+	{
+		if (cachedEntityID == null)
+		{
+			GetEntityIDMessage getEntityIDMessage = new GetEntityIDMessage();
+			ComboFutureBase<GetEntityIDReplyMessage>future = new ComboFutureBase<GetEntityIDReplyMessage>();
+
+			try
+			{
+				sendMessage(getEntityIDMessage, future, null);
+				GetEntityIDReplyMessage replyMessage = future.get();
+				if (replyMessage != null)
+					cachedEntityID = replyMessage.getEntityID();
+			} 
+			catch (ExecutionException ee)
+			{
+				try
+				{
+					throw ee.getCause();
+				}
+				catch (RemoteException e)
+				{
+					throw e;
+				}
+				catch (Throwable e)
+				{
+					throw new InternalError("Could not execute");
+				}
+			}
+			catch(InterruptedException e)
+			{
+				throw new RemoteException();
+			}
+			catch (IOException e)
+			{
+				throw new RemoteException();
+			} 
+		}
+		return cachedEntityID;
 	}
 
 	@Override
@@ -320,10 +371,118 @@ public class EntityAuthenticationServerFirehoseClient extends FirehoseClient imp
 			return AuthenticateServerReplyMessage.class;
 		case kGetEntityID:
 			return GetEntityIDReplyMessage.class;
+		case kGetServerCertificate:
+			return GetServerCertificateReplyMessage.class;
 		default:
 			break;
 		}
 		return null;
 	}
 
+	public String toString()
+	{
+		try
+		{
+			return getClass().getName()+" entityID = "+getEntityID()+" address = "+getServerAddress();
+		} catch (RemoteException e)
+		{
+			Logger.getLogger(getClass()).error(new ErrorLogMessage("Caught exception"), e);
+		} catch (IOException e)
+		{
+			Logger.getLogger(getClass()).error(new ErrorLogMessage("Caught exception"), e);
+		}
+		return  getClass().getName() + "<Error getting info>";
+	}
+	
+	private static final int kServerNotRegisteredException = kExtendedErrorStart + 1;
+	private static final int kAuthenticationFailureException = kServerNotRegisteredException + 1;
+	private static final int kCertificateEncodingException = kAuthenticationFailureException + 1;
+	private static final int kInvalidKeyException = kCertificateEncodingException + 1;
+	private static final int kIllegalStateException = kInvalidKeyException + 1;
+	private static final int kNoSuchProviderException = kIllegalStateException + 1;
+	private static final int kNoSuchAlgorithmException = kNoSuchProviderException + 1;
+	private static final int kSignatureException = kNoSuchAlgorithmException + 1;
+	private static final int kUnrecoverableKeyException = kSignatureException + 1;
+	private static final int kKeyStoreException = kUnrecoverableKeyException + 1;
+	private static final int kCertificateParsingException = kKeyStoreException + 1;
+	private static final int kCertificateExpiredException = kCertificateParsingException + 1;
+	private static final int kCertificateNotYetValidException = kCertificateExpiredException + 1;
+	@Override
+	public int getExtendedErrorCodeForThrowable(Throwable t)
+	{
+		return EntityAuthenticationServerFirehoseClient.getExtendedErrorCodeForThrowableStatic(t);
+	}
+
+	@Override
+	public Throwable getExtendedThrowableForErrorCode(int errorCode)
+	{
+		return EntityAuthenticationServerFirehoseClient.getExtendedThrowableForErrorCodeStatic(errorCode);
+	}
+	
+	public static int getExtendedErrorCodeForThrowableStatic(Throwable t)
+	{
+		Class<? extends Throwable> throwableClass = t.getClass();
+		if (throwableClass.equals(ServerNotRegisteredException.class))
+			return kServerNotRegisteredException;
+		if (throwableClass.equals(AuthenticationFailureException.class))
+			return kAuthenticationFailureException;
+		if (throwableClass.equals(CertificateEncodingException.class))
+			return kAuthenticationFailureException;
+		if (throwableClass.equals(InvalidKeyException.class))
+			return kAuthenticationFailureException;
+		if (throwableClass.equals(IllegalStateException.class))
+			return kAuthenticationFailureException;
+		if (throwableClass.equals(NoSuchProviderException.class))
+			return kAuthenticationFailureException;
+		if (throwableClass.equals(NoSuchAlgorithmException.class))
+			return kAuthenticationFailureException;
+		if (throwableClass.equals(SignatureException.class))
+			return kAuthenticationFailureException;
+		if (throwableClass.equals(UnrecoverableKeyException.class))
+			return kAuthenticationFailureException;
+		if (throwableClass.equals(KeyStoreException.class))
+			return kAuthenticationFailureException;
+		if (throwableClass.equals(CertificateParsingException.class))
+			return kAuthenticationFailureException;
+		if (throwableClass.equals(CertificateExpiredException.class))
+			return kCertificateExpiredException;
+		if (throwableClass.equals(CertificateNotYetValidException.class))
+			return kCertificateNotYetValidException;
+		return -1;
+	}
+	
+	public static Throwable getExtendedThrowableForErrorCodeStatic(int errorCode)
+	{
+		switch(errorCode)
+		{
+		case kServerNotRegisteredException:
+			return new ServerNotRegisteredException();
+		case kAuthenticationFailureException:
+			return new AuthenticationFailureException();
+		case kCertificateEncodingException:
+			return new CertificateEncodingException();
+		case kInvalidKeyException:
+			return new InvalidKeyException();
+		case kIllegalStateException:
+			return new IllegalStateException();
+		case kNoSuchProviderException:
+			return new NoSuchProviderException();
+		case kNoSuchAlgorithmException:
+			return new NoSuchAlgorithmException();
+		case kSignatureException:
+			return new SignatureException();
+		case kUnrecoverableKeyException:
+			return new UnrecoverableKeyException();
+		case kKeyStoreException:
+			return new KeyStoreException();
+		case kCertificateParsingException:
+			return new CertificateParsingException();
+		case kCertificateExpiredException:
+			return new CertificateExpiredException();
+		case kCertificateNotYetValidException:
+			return new CertificateNotYetValidException();
+		default:
+			return null;
+		}
+	}
 }

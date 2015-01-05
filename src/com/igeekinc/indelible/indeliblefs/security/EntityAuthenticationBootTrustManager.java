@@ -33,21 +33,22 @@ public class EntityAuthenticationBootTrustManager implements X509TrustManager
 	public void checkClientTrusted(X509Certificate[] arg0, String arg1)
 			throws CertificateException
 	{
-		System.out.println("checkClientTrusted called");
+		// TODO - Check boot certificates
+		//System.out.println("checkClientTrusted called");
 	}
 
 	@Override
 	public void checkServerTrusted(X509Certificate[] arg0, String arg1)
 			throws CertificateException
 	{
-		System.out.println("checkServerTrusted called");
+		//System.out.println("checkServerTrusted called");
 	}
 
 	@Override
 	public X509Certificate[] getAcceptedIssuers()
 	{
-		System.out.println("getAcceptedIssuers called");
-		return null;
+		//System.out.println("getAcceptedIssuers called");
+		return new X509Certificate[0];
 	}
 
 }

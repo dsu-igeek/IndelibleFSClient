@@ -75,4 +75,9 @@ public class IndelibleFSServerInfo implements Serializable
 	{
 		return (EntityID) properties.get(kSecurityServerIDPropertyName);
 	}
+	
+	public String toString()
+	{
+		return getPropertyByName(kServerIDPropertyName)+":"+getPropertyByName(kDisplayNamePropertyName)+":"+getPropertyByName(kIPAddressPropertyName);
+	}
 }

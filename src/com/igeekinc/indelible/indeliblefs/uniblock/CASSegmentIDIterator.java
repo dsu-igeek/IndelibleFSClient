@@ -18,9 +18,9 @@ package com.igeekinc.indelible.indeliblefs.uniblock;
 
 import java.util.Iterator;
 
-import com.igeekinc.indelible.oid.CASSegmentID;
+import com.igeekinc.indelible.oid.ObjectID;
 
-public interface CASSegmentIDIterator extends Iterator<CASSegmentID>
+public interface CASSegmentIDIterator extends Iterator<ObjectID>
 {
 	public void close();
 }

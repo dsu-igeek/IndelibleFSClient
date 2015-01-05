@@ -21,7 +21,7 @@ import java.rmi.RemoteException;
 import org.apache.log4j.Logger;
 
 import com.igeekinc.indelible.indeliblefs.uniblock.CASSegmentIDIterator;
-import com.igeekinc.indelible.oid.CASSegmentID;
+import com.igeekinc.indelible.oid.ObjectID;
 import com.igeekinc.util.logging.ErrorLogMessage;
 
 public class RemoteCASSegmentIDIteratorProxy implements CASSegmentIDIterator
@@ -47,7 +47,7 @@ public class RemoteCASSegmentIDIteratorProxy implements CASSegmentIDIterator
 	}
 
 	@Override
-	public CASSegmentID next()
+	public ObjectID next()
 	{
 		try
 		{

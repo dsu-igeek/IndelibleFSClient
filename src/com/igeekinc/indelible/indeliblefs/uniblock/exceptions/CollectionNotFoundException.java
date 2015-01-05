@@ -27,4 +27,8 @@ public class CollectionNotFoundException extends Exception
     {
         super(msg);
     }
+
+	public CollectionNotFoundException()
+	{
+	}
 }

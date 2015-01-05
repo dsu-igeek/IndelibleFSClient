@@ -98,8 +98,9 @@ public class AFUnixAuthenticatedSocketUtils
 	
 	public static X509Certificate [] readCertChain(InputStream inputStream) throws IOException
 	{
-		if (inputStream.read() != kCertificateCommand)
-			throw new IOException("Expected starting "+kCertificateCommand);
+		int firstByte = inputStream.read();
+		if (firstByte != kCertificateCommand)
+			throw new IOException("Expected starting "+kCertificateCommand+" got "+Integer.toString(firstByte));
 		int numCerts = inputStream.read();
 		X509Certificate [] returnCerts = new X509Certificate[numCerts];
 		

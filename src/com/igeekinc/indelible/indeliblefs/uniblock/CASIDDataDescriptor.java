@@ -22,4 +22,8 @@ import com.igeekinc.util.datadescriptor.DataDescriptor;
 public interface CASIDDataDescriptor extends DataDescriptor
 {
     public CASIdentifier getCASIdentifier();
+    /*
+     * releases any resources held by this descriptor 
+     */
+    public void release();
 }

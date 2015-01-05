@@ -22,6 +22,7 @@ import gnu.getopt.LongOpt;
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.net.InetSocketAddress;
 import java.rmi.RemoteException;
 import java.security.InvalidKeyException;
 import java.security.KeyStoreException;
@@ -41,8 +42,8 @@ import org.apache.log4j.Level;
 import org.apache.log4j.Logger;
 
 import com.igeekinc.indelible.PreferencesManager;
-import com.igeekinc.indelible.indeliblefs.IndelibleFSClient;
 import com.igeekinc.indelible.indeliblefs.IndelibleFSClientPreferences;
+import com.igeekinc.indelible.indeliblefs.IndelibleFSServer;
 import com.igeekinc.indelible.indeliblefs.IndelibleFSVolumeIF;
 import com.igeekinc.indelible.indeliblefs.IndelibleServerConnectionIF;
 import com.igeekinc.indelible.indeliblefs.datamover.DataMoverReceiver;
@@ -50,12 +51,11 @@ import com.igeekinc.indelible.indeliblefs.datamover.DataMoverSession;
 import com.igeekinc.indelible.indeliblefs.datamover.DataMoverSource;
 import com.igeekinc.indelible.indeliblefs.exceptions.PermissionDeniedException;
 import com.igeekinc.indelible.indeliblefs.exceptions.VolumeNotFoundException;
-import com.igeekinc.indelible.indeliblefs.proxies.IndelibleFSServerProxy;
+import com.igeekinc.indelible.indeliblefs.firehose.IndelibleFSClient;
 import com.igeekinc.indelible.indeliblefs.security.AuthenticationFailureException;
 import com.igeekinc.indelible.indeliblefs.security.EntityAuthentication;
 import com.igeekinc.indelible.indeliblefs.security.EntityAuthenticationClient;
 import com.igeekinc.indelible.indeliblefs.security.EntityAuthenticationServer;
-import com.igeekinc.indelible.indeliblefs.security.EntityAuthenticationServerFirehoseClient;
 import com.igeekinc.indelible.oid.EntityID;
 import com.igeekinc.indelible.oid.GeneratorID;
 import com.igeekinc.indelible.oid.GeneratorIDFactory;
@@ -66,7 +66,7 @@ import com.igeekinc.util.MonitoredProperties;
 
 public abstract class IndelibleFSUtilBase
 {
-    protected IndelibleFSServerProxy fsServer;
+    protected IndelibleFSServer fsServer;
     protected IndelibleServerConnectionIF connection;
     protected EntityAuthenticationServer securityServer;
     protected DataMoverSession moverSession;
@@ -86,7 +86,7 @@ public abstract class IndelibleFSUtilBase
 			InvalidKeyException, NoSuchProviderException, SignatureException,
 			AuthenticationFailureException, InterruptedException,
 			RemoteException, SSLPeerUnverifiedException,
-			CertificateParsingException, CertificateEncodingException
+			CertificateParsingException, CertificateEncodingException, PermissionDeniedException
 	{
 		MonitoredProperties clientProperties = setupProperties();
 		try
@@ -113,7 +113,7 @@ public abstract class IndelibleFSUtilBase
         
         EntityAuthenticationClient.getEntityAuthenticationClient().trustServer(securityServer);
         IndelibleFSClient.start(null, clientProperties);
-        IndelibleFSServerProxy[] servers = new IndelibleFSServerProxy[0];
+        IndelibleFSServer[] servers = new IndelibleFSServer[0];
         
         while(servers.length == 0)
         {
@@ -126,8 +126,8 @@ public abstract class IndelibleFSUtilBase
         GeneratorIDFactory genIDFactory = new GeneratorIDFactory();
         GeneratorID testBaseID = genIDFactory.createGeneratorID();
         ObjectIDFactory oidFactory = new ObjectIDFactory(testBaseID);
-        DataMoverSource.init(oidFactory);
         DataMoverReceiver.init(oidFactory);
+        DataMoverSource.init(oidFactory, new InetSocketAddress(0), null);
 
         connection = fsServer.open();
         

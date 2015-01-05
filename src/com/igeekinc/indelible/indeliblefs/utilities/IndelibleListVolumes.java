@@ -25,12 +25,11 @@ import java.security.NoSuchProviderException;
 import java.security.SignatureException;
 import java.security.UnrecoverableKeyException;
 import java.security.cert.CertificateException;
-import java.util.HashMap;
+import java.util.Map;
 
 import com.igeekinc.indelible.indeliblefs.IndelibleFSVolumeIF;
 import com.igeekinc.indelible.indeliblefs.exceptions.PermissionDeniedException;
 import com.igeekinc.indelible.indeliblefs.exceptions.VolumeNotFoundException;
-import com.igeekinc.indelible.indeliblefs.remote.IndelibleFSVolumeRemote;
 import com.igeekinc.indelible.indeliblefs.remote.IndelibleFileNodeRemote;
 import com.igeekinc.indelible.indeliblefs.security.AuthenticationFailureException;
 import com.igeekinc.indelible.oid.IndelibleFSObjectID;
@@ -61,7 +60,7 @@ public class IndelibleListVolumes extends IndelibleFSUtilBase
 				String [] mdNames = curVolume.listMetaDataResources();
 				for (String curMetaDataName:mdNames)
 				{
-					HashMap<String, Object>mdMap = curVolume.getMetaDataResource(curMetaDataName);
+					Map<String, Object>mdMap = curVolume.getMetaDataResource(curMetaDataName);
 					if (mdMap != null)
 					{
 						System.out.println("\t"+curMetaDataName);

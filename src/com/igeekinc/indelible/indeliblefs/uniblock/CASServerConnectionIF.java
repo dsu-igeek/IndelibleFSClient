@@ -35,12 +35,11 @@ public interface CASServerConnectionIF extends IndelibleEventSource
 
 	public abstract void close();
 	public abstract boolean isClosed();
-	public abstract CASCollectionConnection getCollectionConnection(
-			CASCollectionID id) throws CollectionNotFoundException;
+	public abstract CASCollectionConnection openCollectionConnection(CASCollectionID id) throws CollectionNotFoundException, IOException;
 
 	public abstract CASCollectionConnection createNewCollection() throws IOException;
-
-	public abstract EntityID getServerID();
+	public abstract void deleteCollection(CASCollectionID id) throws CollectionNotFoundException, IOException;
+	public abstract EntityID getServerID() throws IOException;
 	public abstract EntityID getSecurityServerID();
 	
 	public abstract CASCollectionID[] listCollections();

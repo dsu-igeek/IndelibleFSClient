@@ -18,47 +18,12 @@ package com.igeekinc.indelible.indeliblefs.uniblock;
 
 import java.io.IOException;
 
-import com.igeekinc.indelible.indeliblefs.core.IndelibleFSTransaction;
-import com.igeekinc.indelible.indeliblefs.core.IndelibleVersion;
-import com.igeekinc.indelible.indeliblefs.uniblock.exceptions.CollectionNotFoundException;
-import com.igeekinc.indelible.oid.CASCollectionID;
+import com.igeekinc.indelible.indeliblefs.exceptions.PermissionDeniedException;
 import com.igeekinc.indelible.oid.EntityID;
-import com.igeekinc.indelible.oid.ObjectID;
-import com.igeekinc.indelible.oid.ObjectIDFactory;
-import com.igeekinc.util.datadescriptor.DataDescriptor;
 
 public interface CASServer<C extends CASServerConnectionIF>
 {
-    IndelibleVersion startTransaction(C connection) throws IOException;
-    IndelibleVersion startReplicatedTransaction(C casServerConnection, TransactionCommittedEvent transaction) throws IOException;
-    IndelibleFSTransaction commit(C connection) throws IOException;
-    void rollback(C connection);
-    
-    public CASCollectionConnection getCollection(C connection, CASCollectionID id) throws CollectionNotFoundException;
-    public CASCollectionConnection createNewCollection(C connection) throws IOException;
-    public EntityID getServerID();
-    public void setSecurityServerID(EntityID securityServerID);
+	public C open() throws PermissionDeniedException, IOException;
+    public EntityID getServerID() throws IOException;
     public EntityID getSecurityServerID();  // Returns the SecurityServer ID that this CASServer will accept server/client authentications from
-    public CASCollectionID [] listCollections(C connection);
-    public DataDescriptor retrieveMetaData(C connection, String name) throws IOException;
-    public void storeMetaData(C connection, String name, DataDescriptor metaData) throws IOException;
-    public ObjectIDFactory getOIDFactory();
-    
-	public void logCASCollectionEvent(C casServerConnection, ObjectID source, CASCollectionEvent event, IndelibleFSTransaction transaction) throws IOException;
-	public void logReplicatedCASCollectionEvent(C casServerConnection, ObjectID source, CASCollectionEvent casEvent, IndelibleFSTransaction transaction);
-	
-	public void logServerEvent(C casServerConnection, ObjectID source, CASServerEvent serverEvent, IndelibleFSTransaction transaction);
-	public void logReplicatedServerEvent(C casServerConnection, ObjectID source, CASServerEvent serverEvent, IndelibleFSTransaction transaction);
-	
-	public CASCollectionConnection addCollection(C casServerConnection, CASCollectionID addCollectionID) throws IOException;
-	public void addConnectedServer(C casServerConnection, EntityID serverID, EntityID securityServerID);
-	public CASCollectionEvent[] getCollectionEventsAfterEventID(C serverConnection, CASCollectionID id, long lastEventID, int maxToReturn) throws IOException;
-	public CASCollectionEvent [] getCollectionEventsAfterTimestamp(C connection, CASCollectionID collectionID, long timestamp, int numToReturn) throws IOException;
-    public CASCollectionEvent [] getCollectionEventsAfterEventIDForTransaction(C connection, CASCollectionID collectionID, long startingEventID, int numToReturn, IndelibleFSTransaction transaction) throws IOException;
-	public CASServerEvent[] getServerEventsAfterEventID(C serverConnection, long lastEventID, int maxToReturn) throws IOException;
-	public CASServerEvent[] getServerEventsAfterTimestamp(C connection, long timestamp, int numToReturn) throws IOException;
-	public CASServerEvent [] getServerEventsAfterEventIDForTransaction(C connection, CASCollectionID collectionID, long startingEventID, int numToReturn, IndelibleFSTransaction transaction) throws IOException;
-	public long getLastServerEventID(C casServerConnection);
-	public long getVersionIDForVersion(C connection, IndelibleVersion version);
-	public void loadTime(C connection, IndelibleVersion version);
 }

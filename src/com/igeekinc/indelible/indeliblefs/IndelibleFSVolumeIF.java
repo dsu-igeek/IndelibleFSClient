@@ -17,7 +17,7 @@
 package com.igeekinc.indelible.indeliblefs;
 
 import java.io.IOException;
-import java.util.HashMap;
+import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.Future;
 
@@ -134,7 +134,7 @@ public interface IndelibleFSVolumeIF extends IndelibleFSObjectIF
 			throws PermissionDeniedException, IOException;
 
 	public abstract IndelibleFSVolumeIF setMetaDataResource(
-			String mdResourceName, HashMap<String, Object> resources)
+			String mdResourceName, Map<String, Object> resources)
 			throws PermissionDeniedException, IOException;
 
 	public abstract IndelibleVersionIterator listVersionsForObject(

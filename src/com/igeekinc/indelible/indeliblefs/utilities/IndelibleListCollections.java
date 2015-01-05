@@ -26,7 +26,7 @@ import java.security.NoSuchProviderException;
 import java.security.SignatureException;
 import java.security.UnrecoverableKeyException;
 import java.security.cert.CertificateException;
-import java.util.HashMap;
+import java.util.Map;
 
 import com.igeekinc.indelible.indeliblefs.exceptions.PermissionDeniedException;
 import com.igeekinc.indelible.indeliblefs.exceptions.VolumeNotFoundException;
@@ -57,14 +57,14 @@ public class IndelibleListCollections extends IndelibleFSUtilBase
     		CASCollectionConnection curCollectionConn;
     		try
     		{
-    			curCollectionConn = serverConn.getCollectionConnection(curCollectionID);
+    			curCollectionConn = serverConn.openCollectionConnection(curCollectionID);
     			System.out.println("--------------------");
     			System.out.println(curCollectionID.toString());
     			String [] metaDataNames = curCollectionConn.listMetaDataNames();
     			for (String curMetaDataName:metaDataNames)
     			{
     				
-    				HashMap<String, Serializable>mdMap = curCollectionConn.getMetaDataResource(curMetaDataName);
+    				Map<String, Serializable>mdMap = curCollectionConn.getMetaDataResource(curMetaDataName);
     				if (mdMap != null)
     				{
     					System.out.println("\t"+curMetaDataName);

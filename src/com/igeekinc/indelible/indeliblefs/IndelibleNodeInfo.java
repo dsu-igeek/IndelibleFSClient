@@ -17,7 +17,7 @@
 package com.igeekinc.indelible.indeliblefs;
 
 import java.io.Serializable;
-import java.util.HashMap;
+import java.util.Map;
 import java.util.Set;
 
 import com.igeekinc.indelible.oid.IndelibleFSObjectID;
@@ -27,9 +27,9 @@ public class IndelibleNodeInfo implements Serializable
 	private static final long	serialVersionUID	= 4907924554264809265L;
 	private IndelibleFSObjectID nodeID;
 	private String name;
-	private HashMap<String, HashMap<String, Object>> metaData;
+	private Map<String, Map<String, Object>> metaData;
 	
-	public IndelibleNodeInfo(IndelibleFSObjectID nodeID, String name, HashMap<String, HashMap<String, Object>> metaData)
+	public IndelibleNodeInfo(IndelibleFSObjectID nodeID, String name, Map<String, Map<String, Object>> metaData)
 	{
 		this.nodeID = nodeID;
 		this.name = name;
@@ -46,7 +46,7 @@ public class IndelibleNodeInfo implements Serializable
 		return name;
 	}
 	
-	public HashMap<String, Object>getMetaData(String mdName)
+	public Map<String, Object>getMetaData(String mdName)
 	{
 		return metaData.get(mdName);
 	}
@@ -57,5 +57,10 @@ public class IndelibleNodeInfo implements Serializable
 		String [] returnNames = new String[keySet.size()];
 		returnNames = keySet.toArray(returnNames);
 		return returnNames;
+	}
+	
+	public  Map<String, Map<String, Object>> getAllMetaData()
+	{
+		return metaData;
 	}
 }

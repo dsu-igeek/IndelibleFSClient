@@ -22,11 +22,9 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.Serializable;
-import java.lang.reflect.Array;
-import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
-import java.util.Arrays;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 
 import org.apache.log4j.Logger;
@@ -38,6 +36,7 @@ import com.igeekinc.indelible.oid.DataMoverSessionID;
 import com.igeekinc.indelible.oid.EntityID;
 import com.igeekinc.indelible.oid.NetworkDataDescriptorID;
 import com.igeekinc.indelible.oid.ObjectIDFactory;
+import com.igeekinc.util.EthernetID;
 import com.igeekinc.util.async.AsyncCompletion;
 import com.igeekinc.util.async.ComboFutureBase;
 import com.igeekinc.util.datadescriptor.DataDescriptor;
@@ -72,19 +71,23 @@ class NetworkDataDescriptorFuture extends ComboFutureBase<Integer>
 	}
 }
 
-class NetworkDataDescriptorCompletionHandler implements AsyncCompletion<Void, Void>
+class NetworkDataDescriptorCompletionHandler implements AsyncCompletion<Integer, Void>
 {
 	private NetworkDataDescriptorFuture nddFuture;
 	private int length;
 	public NetworkDataDescriptorCompletionHandler(NetworkDataDescriptorFuture nddFuture, int length)
 	{
+		if (nddFuture == null)
+			throw new IllegalArgumentException("Must supply a NetworkDataDescriptorFuture");
 		this.nddFuture = nddFuture;
 		this.length = length;
 	}
 	@Override
-	public void completed(Void result, Void attachment)
+	public void completed(Integer result, Void attachment)
 	{
-		nddFuture.completed(length, null);
+		if (result == null)
+			throw new IllegalArgumentException("Result cannot be null");
+		nddFuture.completed(result, null);
 	}
 
 	@Override
@@ -103,6 +106,7 @@ public class NetworkDataDescriptor implements Serializable, CASIDDataDescriptor
     }
     NetworkDataDescriptorID id;
     long dataLength;
+    EthernetID sourceID;	// We pass this around so we can figure out if we're on the same host or not
     InetSocketAddress [] hostPorts;
     EntityID serverID;
     EntityID securityServerID;
@@ -115,8 +119,9 @@ public class NetworkDataDescriptor implements Serializable, CASIDDataDescriptor
     private transient boolean closed;
     private transient boolean local;
     
-    protected NetworkDataDescriptor(EntityID serverID, EntityID securityServerID, DataMoverSessionID sessionID, NetworkDataDescriptorID id, 
-            CASIdentifier casIdentifier, long dataLength, InetSocketAddress [] hostPorts, File localSocket, DataDescriptor originalDescriptor)
+    public NetworkDataDescriptor(EntityID serverID, EntityID securityServerID, DataMoverSessionID sessionID, NetworkDataDescriptorID id, 
+            CASIdentifier casIdentifier, long dataLength, EthernetID sourceID, InetSocketAddress [] hostPorts, File localSocket, DataDescriptor originalDescriptor,
+            boolean local)
     {
         if (serverID == null)
             throw new IllegalArgumentException("ServerID cannot be null");
@@ -133,11 +138,12 @@ public class NetworkDataDescriptor implements Serializable, CASIDDataDescriptor
         this.id = id;
         this.casIdentifier = casIdentifier;
         this.dataLength = dataLength;
+        this.sourceID = sourceID;
         this.hostPorts = new InetSocketAddress[hostPorts.length];
         System.arraycopy(hostPorts, 0, this.hostPorts, 0, hostPorts.length);
         this.localSocket = localSocket;
         this.shareableDescriptor = originalDescriptor;
-        this.local = true;
+        this.local = local;
     }
 
     public NetworkDataDescriptorID getID()
@@ -150,7 +156,12 @@ public class NetworkDataDescriptor implements Serializable, CASIDDataDescriptor
         return serverID;
     }
 
-    public DataMoverSessionID getSessionID()
+    public EthernetID getSourceID()
+	{
+		return sourceID;
+	}
+
+	public DataMoverSessionID getSessionID()
     {
         return sessionID;
     }
@@ -230,15 +241,27 @@ public class NetworkDataDescriptor implements Serializable, CASIDDataDescriptor
             moverClient = DataMoverReceiver.getDataMoverReceiver();  
         try
         {
-            int returnBytesRead = moverClient.getDataFromDescriptor(this, destination, srcOffset, length, release);
+            Future<Integer>getDataFuture = getDataAsync(destination, srcOffset, length, release);
+            int returnBytesRead = getDataFuture.get();
             if (release)
             	setClosed();
 			return returnBytesRead;
-        } catch (AuthenticationFailureException e)
+        } catch (ExecutionException e)
         {
-            Logger.getLogger(getClass()).error(new ErrorLogMessage("Caught exception"), e);
-            throw new IOException("Authentication failed connecting to mover");
-        }
+        	if (e.getCause() instanceof IOException)
+        		throw (IOException)e.getCause();
+        	if (e.getCause() instanceof AuthenticationFailureException)
+        	{
+        		Logger.getLogger(getClass()).error(new ErrorLogMessage("Caught exception"), e);
+        		throw new IOException("Authentication failed connecting to mover");
+        	}
+			Logger.getLogger(getClass()).error(new ErrorLogMessage("Got unexpected exception"), e);
+        	throw new IOException("Got unexpected exception "+e.getCause().toString());
+        } catch (InterruptedException e)
+		{
+			Logger.getLogger(getClass()).error(new ErrorLogMessage("Caught exception"), e);
+			throw new IOException("Interrupted while waiting for results");
+		}
 	}
 
 	@Override
@@ -366,4 +389,36 @@ public class NetworkDataDescriptor implements Serializable, CASIDDataDescriptor
     {
     	closed = true;
     }
+    
+    public String toString()
+    {
+    	StringBuffer buildBuffer = new StringBuffer("id = ");
+    	buildBuffer.append(id.toString());
+    	buildBuffer.append(", length = ");
+    	buildBuffer.append(Long.toString(dataLength));
+    	buildBuffer.append(", hostPorts={");
+    	for (InetSocketAddress curAddress:getHostPorts())
+    	{
+    		buildBuffer.append(curAddress.toString());
+    		buildBuffer.append(" ");
+    	}
+    	buildBuffer.append("}, localSocket = ");
+    	if (localSocket != null)
+    		buildBuffer.append(localSocket.toString());
+    	else
+    		buildBuffer.append("<none>");
+    	return buildBuffer.toString();
+    }
+
+	@Override
+	public void release()
+	{
+		try
+		{
+			getData(new byte[0], 0, 0, 0, true); // Release the remote resources
+		} catch (IOException e)
+		{
+			Logger.getLogger(getClass()).error(new ErrorLogMessage("Caught exception"), e);
+		}	
+	}
 }

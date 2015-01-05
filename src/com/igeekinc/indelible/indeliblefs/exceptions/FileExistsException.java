@@ -20,6 +20,11 @@ public class FileExistsException extends IndelibleFSException
 {
 	private static final long serialVersionUID = 3797717134415392609L;
 
+	public FileExistsException()
+	{
+		
+	}
+	
 	public FileExistsException(String fileName)
 	{
 		super("File "+fileName+" already exists");

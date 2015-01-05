@@ -17,7 +17,7 @@
 package com.igeekinc.indelible.indeliblefs.security;
 
 import java.io.IOException;
-import java.rmi.Remote;
+import java.net.SocketAddress;
 import java.rmi.RemoteException;
 import java.security.InvalidKeyException;
 import java.security.KeyStoreException;
@@ -35,18 +35,17 @@ import com.igeekinc.indelible.oid.EntityID;
 
 /**
  * EntityAuthenticationServer interface.  The entity authentication server is responsible for authenticating other Indelible FS servers.
- * It provides 
  * 
  * @author David L. Smith-Uchida
  */
-public interface EntityAuthenticationServer extends Remote
+public interface EntityAuthenticationServer
 {
     public static final String kIndelibleEntityAuthenticationServerRMIName = "IndelibleEntityAuthenticationServer";
     public static final String kSignatureType = "SHA1withDSA";
     public static final long kDefaultAuthorizationTime = 60 * 60 * 1000;
     public static final String kChallengeSignatureAlg = "SHA1withRSA";
     public static final String kCertificateSignatureAlg = "SHA1withRSA";
-    public static final int kDefaultEntityAuthenticationServerStaticPort = 43192;
+    public static final int kDefaultEntityAuthenticationServerStaticPort = 50902;
     public static final String kEntityAuthenticationServerRandomPortPropertyName="indelible.security.entityauthenticationserver.useRandomPort";
     public static final String kEntityAuthenticationServerPortNumberPropertyName="indelible.security.entityauthenticationserver.portNumber";
     /**
@@ -86,13 +85,17 @@ public interface EntityAuthenticationServer extends Remote
      * @throws KeyStoreException
      * @throws RemoteException
      * @throws IOException
+     * @throws ServerNotRegisteredException
+     * @throws AuthenticationFailureException
+
      * @throws CertificateParsingException
      */
     public abstract EntityAuthentication authenticateServer(EntityID serverID,
             byte[] encodedCertReq) throws CertificateEncodingException,
             InvalidKeyException, IllegalStateException,
             NoSuchProviderException, NoSuchAlgorithmException,
-            SignatureException, UnrecoverableKeyException, KeyStoreException, RemoteException, IOException, CertificateParsingException;
+            SignatureException, UnrecoverableKeyException, KeyStoreException, RemoteException, 
+            IOException, CertificateParsingException, ServerNotRegisteredException, AuthenticationFailureException;
 
     /**
      * Returns the certificate for this server.  The certificate may be a root certificate (if this is the root server) or it may be a 
@@ -117,4 +120,12 @@ public interface EntityAuthenticationServer extends Remote
      * @throws RemoteException
      */
     public abstract EntityID getEntityID() throws RemoteException;
+    
+    public abstract SocketAddress getServerAddress() throws IOException, RemoteException;
+    
+	public void close() throws IOException;
+	public void close(long timeout) throws IOException;
+
+	public boolean isClosed();
+
 }

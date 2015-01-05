@@ -16,6 +16,7 @@
  
 package com.igeekinc.indelible.indeliblefs.core;
 
+
 /**
  * A CASCollection stores mutable and immutable data.  Both are identified by an IndelibleFSObjectID that is
  * assigned when the data is stored.  In the case of immutable data, the IndelibleFSObjectID and CASIdentifier
@@ -31,6 +32,39 @@ package com.igeekinc.indelible.indeliblefs.core;
 
 public enum RetrieveVersionFlags
 {
-	kExact,
-	kNearest
+	kExact(0),
+	kNearest(1);
+	
+	static RetrieveVersionFlags [] flagsArray;
+    static {
+    	flagsArray = new RetrieveVersionFlags[RetrieveVersionFlags.values().length];
+    	for (RetrieveVersionFlags addCommand:RetrieveVersionFlags.values())
+    	{
+    		if (addCommand.flagValue > flagsArray.length)
+    			throw new InternalError("Command num > # of commands");
+    		if (flagsArray[addCommand.flagValue] != null)
+    			throw new InternalError(addCommand.flagValue+" is double-booked");
+    		flagsArray[addCommand.flagValue] = addCommand;
+    	}
+    }
+    
+	int flagValue;
+	private RetrieveVersionFlags(int flagValue)
+	{
+		this.flagValue = flagValue;
+	}
+
+	public int getFlagValue()
+	{
+		return flagValue;
+	}
+	
+	public static RetrieveVersionFlags getFlagForNum(int num)
+	{
+		if (num >= flagsArray.length)
+			throw new IllegalArgumentException(num+" > max command number ("+(flagsArray.length - 1)+")");
+		if (num < 0)
+			throw new IllegalArgumentException(num+" cannot be negative");
+		return flagsArray[num];
+	}
 }

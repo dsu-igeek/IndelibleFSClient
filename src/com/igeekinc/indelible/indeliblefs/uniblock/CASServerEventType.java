@@ -18,10 +18,9 @@ package com.igeekinc.indelible.indeliblefs.uniblock;
 
 public enum CASServerEventType
 {
-	kCollectionCreated('C'), kCollectionDestroyed('M'), kTransactionCommited('T');
+	kCollectionCreated('C'), kCollectionDestroyed('M');
 	public static final char kCollectionCreatedEventTypeChar = 'C';
 	public static final char kCollectionDestroyedEventTypeChar = 'M';
-	public static final char kTransactionCommittedEventTypeChar = 'T';
 	private char eventType;
 	private CASServerEventType(char eventType)
 	{
@@ -41,8 +40,6 @@ public enum CASServerEventType
 			return kCollectionCreated;
 		case kCollectionDestroyedEventTypeChar:
 			return kCollectionDestroyed;
-		case kTransactionCommittedEventTypeChar:
-			return kTransactionCommited;
 		default:
 			throw new IllegalArgumentException("Unrecognized event type "+eventTypeChar);
 		}

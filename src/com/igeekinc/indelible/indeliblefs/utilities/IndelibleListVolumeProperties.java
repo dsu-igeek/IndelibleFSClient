@@ -28,7 +28,7 @@ import java.security.NoSuchProviderException;
 import java.security.SignatureException;
 import java.security.UnrecoverableKeyException;
 import java.security.cert.CertificateException;
-import java.util.HashMap;
+import java.util.Map;
 
 import org.apache.log4j.Logger;
 
@@ -120,7 +120,7 @@ public class IndelibleListVolumeProperties extends IndelibleFSUtilBase
             String [] mdResourceNames = volume.listMetaDataResources();
             for (String curMDResourceName:mdResourceNames)
             {
-            	HashMap<String, Object>curMDProperties = volume.getMetaDataResource(curMDResourceName);
+            	Map<String, Object>curMDProperties = volume.getMetaDataResource(curMDResourceName);
             	System.out.println(curMDResourceName+":");
             	for (String curPropertyName:curMDProperties.keySet())
             	{

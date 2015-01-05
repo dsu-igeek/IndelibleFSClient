@@ -21,5 +21,5 @@ import java.util.Iterator;
 
 public interface IndelibleSnapshotIterator extends Iterator<IndelibleSnapshotInfo>, Serializable
 {
-
+	public void close();	// Finished with iterator, releases any resources
 }

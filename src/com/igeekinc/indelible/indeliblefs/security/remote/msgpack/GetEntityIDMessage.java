@@ -26,6 +26,11 @@ public class GetEntityIDMessage extends CommandMessage
 {
 	public GetEntityIDMessage()
 	{
-		super(EntityAuthenticationServerFirehoseClient.EntityAuthenticationCommand.kGetEntityID.getCommandNum());
+	}
+
+	@Override
+	protected int getInitCommandCode()
+	{
+		return EntityAuthenticationServerFirehoseClient.EntityAuthenticationCommand.kGetEntityID.getCommandNum();
 	}
 }

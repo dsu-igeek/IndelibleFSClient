@@ -21,38 +21,37 @@ import org.msgpack.annotation.Message;
 import com.igeekinc.firehose.CommandMessage;
 import com.igeekinc.indelible.indeliblefs.security.EntityAuthenticationServerFirehoseClient;
 import com.igeekinc.indelible.oid.EntityID;
-import com.igeekinc.indelible.oid.msgpack.ObjectIDMsgPack;
 
 @Message
 public class AuthenticateServerMessage extends CommandMessage
 {
-	public ObjectIDMsgPack serverID;
-	public byte [] encodedCertificate;
+	public EntityIDMsgPack entityID;
+	public byte [] encodedCertReq;
 	
 	public AuthenticateServerMessage()
 	{
 		
 	}
 	
-	public AuthenticateServerMessage(EntityID serverID, byte [] encodedCertificate)
+	public AuthenticateServerMessage(EntityID serverID, byte [] encodedCertReq)
 	{
-		super(EntityAuthenticationServerFirehoseClient.EntityAuthenticationCommand.kAuthenticateServerCommand.getCommandNum());
-		this.serverID = new ObjectIDMsgPack(serverID);
-		this.encodedCertificate = encodedCertificate;
+		this.entityID = new EntityIDMsgPack(serverID);
+		this.encodedCertReq = encodedCertReq;
 	}
 	
 	public EntityID getEntityID()
 	{
-		return (EntityID)serverID.getObjectID();
+		return (EntityID)entityID.getObjectID();
 	}
 
-	public ObjectIDMsgPack getServerID()
+	public byte[] getEncodedCertReq()
 	{
-		return serverID;
+		return encodedCertReq;
 	}
 
-	public byte[] getEncodedCertificate()
+	@Override
+	protected int getInitCommandCode()
 	{
-		return encodedCertificate;
+		return EntityAuthenticationServerFirehoseClient.EntityAuthenticationCommand.kAuthenticateServerCommand.getCommandNum();
 	}
 }

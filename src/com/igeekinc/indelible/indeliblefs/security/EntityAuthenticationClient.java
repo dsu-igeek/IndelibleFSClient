@@ -27,11 +27,9 @@ import java.lang.reflect.Constructor;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.SocketAddress;
+import java.nio.channels.UnresolvedAddressException;
 import java.rmi.AccessException;
-import java.rmi.NotBoundException;
 import java.rmi.RemoteException;
-import java.rmi.registry.LocateRegistry;
-import java.rmi.registry.Registry;
 import java.security.GeneralSecurityException;
 import java.security.InvalidKeyException;
 import java.security.KeyPair;
@@ -93,6 +91,7 @@ import sun.security.x509.AVA;
 import sun.security.x509.RDN;
 import sun.security.x509.X500Name;
 
+import com.igeekinc.firehose.SSLFirehoseChannel;
 import com.igeekinc.indelible.indeliblefs.IndelibleEntity;
 import com.igeekinc.indelible.indeliblefs.security.afunix.AFUnixAuthenticatedSocket;
 import com.igeekinc.indelible.oid.DataMoverSessionID;
@@ -106,6 +105,30 @@ import com.igeekinc.util.SystemInfo;
 import com.igeekinc.util.logging.ErrorLogMessage;
 import com.igeekinc.util.logging.WarnLogMessage;
 
+class EntityAuthenticationServerConnector
+{
+	private EntityAuthenticationServer server;
+	
+	public EntityAuthenticationServerConnector(EntityAuthenticationServer server)
+	{
+		this.server = server;
+	}
+	
+	/*
+	 * Retrieves the server.  May attempt reconnect if the server has been closed
+	 */
+	public synchronized EntityAuthenticationServer getServer() throws RemoteException, IOException
+	{
+		if (server.isClosed())
+		{
+			EntityID oldServerID = server.getEntityID();
+			EntityAuthenticationServerFirehoseClient newServer = new EntityAuthenticationServerFirehoseClient(server.getServerAddress());
+			if (oldServerID != null && oldServerID.equals(newServer.getEntityID()))
+				server = newServer;
+		}
+		return server;
+	}
+}
 /**
  * EntityAuthenticationClient manages the connection to EntityAuthenticationServer(s).  It can handle connections to a local server (in the same
  * JVM) or remote servers.  The EntityAuthenticationClient maintains a list of available entity authentication servers and a list of trusted entity authentication servers.
@@ -122,19 +145,21 @@ public abstract class EntityAuthenticationClient extends IndelibleEntity
     private HashMap<String, X509Certificate> trustedServerCertificates = new HashMap<String, X509Certificate>();
     private static EntityAuthenticationClient singleton;
     private boolean initialized;
+    private boolean initServerProcessed = false;
     
     // This is the keystore that is read/written to disk.  It contains all of the certificates of servers
     // that we have been configured to trust and our own certificates(s) 
     private KeyStore persistentKeyStore;
     
     // This is the list of all entity authentication servers we've seen or been configured for
-    private ArrayList<EntityAuthenticationServer> entityAuthenticationServers = new ArrayList<EntityAuthenticationServer>();
+    private HashMap<SocketAddress, EntityAuthenticationServerConnector> entityAuthenticationServers = new HashMap<SocketAddress, EntityAuthenticationServerConnector>();
     
     // This is the list of entity authentication servers that we trust
-    private ArrayList<EntityAuthenticationServer> trustedServers = new ArrayList<EntityAuthenticationServer>();
+    private ArrayList<EntityAuthenticationServerConnector> trustedServers = new ArrayList<EntityAuthenticationServerConnector>();
     private EventListenerList eventListeners = new EventListenerList();
     private EntityID clientIdentity;
-    
+    private HashMap<EntityID, KeyManager []> keyManagersByEntityAuthenticationServerID = new HashMap<EntityID, KeyManager[]>();
+    private HashMap<EntityID, TrustManager []> trustManagersByEntityAuthenticationServerID = new HashMap<EntityID, TrustManager []>();
     private static final String kDefaultKeyStorePassword="IN671$%ddsl";
     private static final String kPrivateKeyAliasPrefix = "sckeyprv-";
     private static final String kEntityAuthenticationServerAuthenticationCertAlias = "entityauthenticationservercert";
@@ -146,7 +171,8 @@ public abstract class EntityAuthenticationClient extends IndelibleEntity
     private ObjectIDFactory oidFactory;
 	public static final String kEntityAuthenticationServerIDKey = "securityServerID";
     private HashMap<EntityID, HashMap<EntityID, EntityAuthentication>> cachedAuthentications = new HashMap<EntityID, HashMap<EntityID, EntityAuthentication>>();
-	static
+
+    static
 	{
 		IndelibleFSClientOIDs.initMappings();
 	}
@@ -274,6 +300,8 @@ public abstract class EntityAuthenticationClient extends IndelibleEntity
     		}
     	}
 		Certificate serverCertificate = primaryEntityAuthenticationServer.getServerCertificate();
+		if (serverCertificate == null)
+			throw new IOException("Could not retrieve certificate");
 		EntityAuthenticationClient.initIdentity(keyStoreFile, (EntityID)oidFactory.getNewOID(IndelibleEntity.class), serverCertificate);
     }
     
@@ -307,7 +335,16 @@ public abstract class EntityAuthenticationClient extends IndelibleEntity
     	@Override
     	public void run()
     	{
-    		connectToInitServer(initProperties);
+    		while (!connectToInitServer(initProperties))
+    		{
+    			try
+				{
+					Thread.sleep(1000);
+				} catch (InterruptedException e)
+				{
+					Logger.getLogger(getClass()).error(new ErrorLogMessage("Caught exception"), e);
+				}
+    		}
     	}
     }
     
@@ -383,29 +420,66 @@ public abstract class EntityAuthenticationClient extends IndelibleEntity
         
         writeKeystore(keyStoreFile, persistentKeyStore);
         initialized = true;
-        //connectToInitServer(entityAuthenticationClientProperties);
+
         Thread connectThread = new Thread(new ConnectToInitServerRunnable(entityAuthenticationClientProperties),
         		"Connect to EntityAuthenticationClient init server");
         connectThread.setDaemon(true);
         connectThread.start();
     }
 
-	private void connectToInitServer(
-			MonitoredProperties entityAuthenticationClientProperties)
+	private boolean connectToInitServer(MonitoredProperties entityAuthenticationClientProperties)
 	{
+		boolean connected = false;
 		try
 		{
 			if (entityAuthenticationClientProperties.getProperty(kInitServerPropertyName) != null)
 			{
-				EntityAuthenticationServer initServer = connectToServer(entityAuthenticationClientProperties.getProperty(kInitServerPropertyName));
-				if (initServer != null)
-					trustServer(initServer);
+				try
+				{
+					EntityAuthenticationServer initServer = connectToServer(entityAuthenticationClientProperties.getProperty(kInitServerPropertyName));
+					if (initServer != null)
+					{
+						trustServer(initServer);
+						connected = true;
+					}
+				}
+				finally
+				{
+					initServerProcessed = true;
+					if (connected)
+					{
+						// We don't fire any events until init server is processed one way or the other.  Now, we're ready to go so let's send those events that
+						// were squelched
+						EntityAuthenticationServerConnector [] entityAuthenticationServersArray = entityAuthenticationServers.values().toArray(new EntityAuthenticationServerConnector [entityAuthenticationServers.values().size()]);
+						for (EntityAuthenticationServerConnector curServer:entityAuthenticationServersArray)
+						{
+							fireEntityAuthenticationServerAppearedEvent(curServer.getServer());
+						}
+						EntityAuthenticationServerConnector [] trustedServersArray = trustedServers.toArray(new EntityAuthenticationServerConnector[trustedServers.size()]);
+						for (EntityAuthenticationServerConnector curTrustedServer:trustedServersArray)
+						{
+							fireEntityAuthenticationServerTrustedEvent(curTrustedServer.getServer());
+						}
+					}
+				}
+			}
+			else
+			{
+				initServerProcessed = true;	// There wasn't one, so yah, we processed that
 			}
 		}
 		catch (Throwable t)
 		{
-			Logger.getLogger(getClass()).error(new ErrorLogMessage("Caught unexpected error connecting to EntityAuthenticationServer", t));
+			Logger.getLogger(getClass()).error(new ErrorLogMessage("Caught unexpected error connecting to EntityAuthenticationServer"), t);
 		}
+		finally
+		{
+			synchronized(this)
+			{
+				notifyAll();
+			}
+		}
+		return connected;
 	}
     
     public byte [] signChallenge(byte [] bytesToSign)
@@ -456,6 +530,7 @@ public abstract class EntityAuthenticationClient extends IndelibleEntity
             {
                 try
                 {
+                	logger.debug("Verifying certificate "+checkCertificate.getSubjectDN());
                     authentication.getCertificate().verify(checkCertificate.getPublicKey(), "BC");
                     authenticated = true;
                     break;
@@ -485,6 +560,7 @@ public abstract class EntityAuthenticationClient extends IndelibleEntity
                 } 
             }
         }
+        logger.debug("authenticated = "+authenticated);
         return authenticated;
     }
 
@@ -495,8 +571,33 @@ public abstract class EntityAuthenticationClient extends IndelibleEntity
      */
     public KeyManager [] getKeyManagers(EntityID entityAuthenticationServerID)
     {
+    	KeyManager [] returnKeyManagers;
+    	synchronized(keyManagersByEntityAuthenticationServerID)
+    	{
+    		returnKeyManagers = keyManagersByEntityAuthenticationServerID.get(entityAuthenticationServerID);
+    	}
+    	if (returnKeyManagers == null)
+    	{
+    		returnKeyManagers = getKeyManagersInternal(entityAuthenticationServerID);
+    		synchronized(keyManagersByEntityAuthenticationServerID)
+    		{
+    			if (keyManagersByEntityAuthenticationServerID.containsKey(entityAuthenticationServerID))
+    			{
+    				returnKeyManagers = keyManagersByEntityAuthenticationServerID.get(entityAuthenticationServerID);	// Someone set it up while we were trying to, just use the one already in the map
+    			}
+    			else
+    			{
+    				keyManagersByEntityAuthenticationServerID.put(entityAuthenticationServerID, returnKeyManagers);
+    			}
+    		}
+    	}
+    	return returnKeyManagers;
+    }
+    public KeyManager [] getKeyManagersInternal(EntityID entityAuthenticationServerID)
+    {
         try
         {
+        	waitForInitServer();
             KeyManagerFactory keyManagerFactory = KeyManagerFactory.getInstance("SunX509");
             KeyStore authenticatedKeyStore = KeyStore.getInstance("JKS");
             authenticatedKeyStore.load(null, kDefaultKeyStorePassword.toCharArray());
@@ -587,7 +688,33 @@ public abstract class EntityAuthenticationClient extends IndelibleEntity
         }
         return "";
     }
+    
     public TrustManager [] getTrustManagers(EntityID entityAuthenticationServerID)
+    {
+    	TrustManager [] returnTrustManagers;
+    	synchronized(trustManagersByEntityAuthenticationServerID)
+    	{
+    		returnTrustManagers = trustManagersByEntityAuthenticationServerID.get(entityAuthenticationServerID);
+    	}
+    	if (returnTrustManagers == null)
+    	{
+    		returnTrustManagers = getTrustManagersInternal(entityAuthenticationServerID);
+    		synchronized(trustManagersByEntityAuthenticationServerID)
+    		{
+    			if (trustManagersByEntityAuthenticationServerID.containsKey(entityAuthenticationServerID))
+    			{
+    				returnTrustManagers = trustManagersByEntityAuthenticationServerID.get(entityAuthenticationServerID);	// Someone set it up while we were trying to, just use the one already in the map
+    			}
+    			else
+    			{
+    				trustManagersByEntityAuthenticationServerID.put(entityAuthenticationServerID, returnTrustManagers);
+    			}
+    		}
+    	}
+    	return returnTrustManagers;
+    }
+    
+    public TrustManager [] getTrustManagersInternal(EntityID entityAuthenticationServerID)
     {
         
         TrustManagerFactory trustFactory = null;
@@ -630,10 +757,11 @@ public abstract class EntityAuthenticationClient extends IndelibleEntity
      * @throws KeyStoreException
      * @throws IOException
      * @throws CertificateParsingException
+     * @throws AuthenticationFailureException 
      */
     public EntityAuthentication authenticateEntity(EntityID entityID, EntityID entityAuthenticationServerID, KeyPair entityKeys) 
     throws CertificateEncodingException, InvalidKeyException, IllegalStateException, NoSuchProviderException, 
-    NoSuchAlgorithmException, SignatureException, UnrecoverableKeyException, KeyStoreException, IOException, CertificateParsingException
+    NoSuchAlgorithmException, SignatureException, UnrecoverableKeyException, KeyStoreException, IOException, CertificateParsingException, AuthenticationFailureException
     {
     	EntityAuthentication returnAuthentication = null;
     	synchronized(cachedAuthentications)
@@ -666,18 +794,34 @@ public abstract class EntityAuthenticationClient extends IndelibleEntity
     				null,
     				entityKeys.getPrivate());
     		byte [] encodedCertReq = certReq.getEncoded();
-    		EntityAuthenticationServer [] authenticateServers = new EntityAuthenticationServer[entityAuthenticationServers.size()];
-    		authenticateServers = entityAuthenticationServers.toArray(authenticateServers);
-
+    		EntityAuthenticationServer [] authenticateServers = listEntityAuthenticationServersInternal();
     		for (int curServerNum = 0; curServerNum < authenticateServers.length; curServerNum++)
     		{
-    			if (authenticateServers[curServerNum].getEntityID().equals(entityAuthenticationServerID))
+    			EntityAuthenticationServer curAuthenticationServer = authenticateServers[curServerNum];
+				if (curAuthenticationServer.getEntityID().equals(entityAuthenticationServerID))
     			{
-    				returnAuthentication = authenticateServers[curServerNum].authenticateServer(entityID, encodedCertReq);
+    				try
+					{
+						returnAuthentication = curAuthenticationServer.authenticateServer(entityID, encodedCertReq);
+					} catch (ServerNotRegisteredException e)
+					{
+						Logger.getLogger(getClass()).warn(new WarnLogMessage("Not registered, re-registering"), e);
+						try
+						{
+							curAuthenticationServer.registerServer(mySelfSignedCert);
+							returnAuthentication = curAuthenticationServer.authenticateServer(entityID, encodedCertReq);
+						} catch (CertificateException e1)
+						{
+							Logger.getLogger(getClass()).error(new ErrorLogMessage("Caught exception"), e1);
+						} catch (ServerNotRegisteredException e1)
+						{
+							Logger.getLogger(getClass()).error(new ErrorLogMessage("Caught exception"), e1);
+						}
+					}
     				break;
     			};
     		}
-    		if (returnAuthentication != null)
+    		if (returnAuthentication != null && returnAuthentication.getCertificate() != null)
     		{
     			synchronized(cachedAuthentications)
     			{
@@ -934,49 +1078,7 @@ public abstract class EntityAuthenticationClient extends IndelibleEntity
         try
         {
             Certificate [] clientCertificates = checkSocket.getSession().getPeerCertificates();
-            X509Certificate clientCertificate = (X509Certificate) clientCertificates[0];
-            clientCertificate.checkValidity();
-                try
-                {
-                    boolean serverValidated = false;
-                    for (X509Certificate checkCertificate:trustedServerCertificates.values())
-                    {
-                        if (dnMatches(checkCertificate.getSubjectDN(), clientCertificate.getIssuerDN()))
-                        {
-                            clientCertificate.verify(checkCertificate.getPublicKey());
-                            serverValidated = true;
-                        }
-                    }
-                    if (!serverValidated)   // If we're not validated by the time we get here, none of our certificates matched
-                        throw new AuthenticationFailureException();
-                } catch (NoSuchAlgorithmException e)
-                {
-                    Logger.getLogger(getClass()).error(new ErrorLogMessage("Caught exception"), e);
-                    throw new InternalError("Could not get signature algorithm "+EntityAuthenticationServer.kCertificateSignatureAlg);
-                } catch (InvalidKeyException e)
-                {
-                    Logger.getLogger(getClass()).error(new ErrorLogMessage("Caught exception"), e);
-                    throw new InternalError("Got InvalidKeyException from authenticationServerCertificate");
-                } catch (CertificateEncodingException e)
-                {
-                    Logger.getLogger(getClass()).error(new ErrorLogMessage("Caught exception"), e);
-                    throw new AuthenticationFailureException();
-                } catch (SignatureException e)
-                {
-                    Logger.getLogger(getClass()).error(new ErrorLogMessage("Caught exception"), e);
-                    throw new AuthenticationFailureException();
-                } catch (CertificateException e)
-                {
-                    Logger.getLogger(getClass()).error(new ErrorLogMessage("Caught exception"), e);
-                    throw new AuthenticationFailureException();
-                } catch (NoSuchProviderException e)
-                {
-                    Logger.getLogger(getClass()).error(new ErrorLogMessage("Caught exception"), e);
-                    throw new InternalError("Got NoSuchProviderException from authenticationServerCertificate");
-                }
-                
-            
-            return new EntityAuthentication(clientCertificate);
+            return getClientEntityAuthenticationForCertificates(clientCertificates);
         } catch (SSLPeerUnverifiedException e)
         {
             Logger.getLogger(getClass()).error(new ErrorLogMessage("Caught exception"), e);
@@ -990,79 +1092,42 @@ public abstract class EntityAuthenticationClient extends IndelibleEntity
         throw new AuthenticationFailureException();
     }
     
-    public EntityAuthentication getServerEntityAuthenticationForSocket(SSLSocket checkSocket)
+    public EntityID getClientAuthenticatedIDForChannel(SSLFirehoseChannel checkSocket)
     throws AuthenticationFailureException
+    {
+    	return getClientEntityAuthenticationForChannel(checkSocket).getEntityID();
+    }
+    
+    public EntityAuthentication getClientEntityAuthenticationForChannel(SSLFirehoseChannel checkSocket)
+    throws AuthenticationFailureException
+    {
+        try
+        {
+            Certificate [] clientCertificates = checkSocket.getPeerCertificates();
+            return getClientEntityAuthenticationForCertificates(clientCertificates);
+        } catch (SSLPeerUnverifiedException e)
+        {
+            Logger.getLogger(getClass()).error(new ErrorLogMessage("Caught exception"), e);
+        } catch (CertificateExpiredException e)
+        {
+            Logger.getLogger(getClass()).error(new ErrorLogMessage("Caught exception"), e);
+        } catch (CertificateNotYetValidException e)
+        {
+            Logger.getLogger(getClass()).error(new ErrorLogMessage("Caught exception"), e);
+        }
+        throw new AuthenticationFailureException();
+    }
+    
+    public EntityAuthentication getClientEntityAuthenticationForFirehoseChannel(SSLFirehoseChannel checkChannel)
+    	    throws AuthenticationFailureException
     {
     	try
     	{
-    		Certificate [] serverCertificates = checkSocket.getSession().getLocalCertificates();
-    		if (logger.isDebugEnabled())
-    		{
-    			logger.debug("Number of serverCertficates = "+serverCertificates.length);
-    			for (int curCertNum = 0; curCertNum < serverCertificates.length; curCertNum++)
-    				logger.debug(curCertNum+":"+serverCertificates[curCertNum].toString());
-    		}
-    		X509Certificate serverCertificate = (X509Certificate) serverCertificates[0];
-    		serverCertificate.checkValidity();
-    		try
-    		{
-    			boolean serverValidated = false;
-    			for (X509Certificate checkCertificate:trustedServerCertificates.values())
-    			{
-    				if (logger.isDebugEnabled())
-    					logger.debug("Checking against trustedServerCertificate:"+checkCertificate.toString());
-    				if (dnMatches(checkCertificate.getSubjectDN(), serverCertificate.getIssuerDN()))
-    				{
-    					logger.debug("DN matches");
-    					serverCertificate.verify(checkCertificate.getPublicKey());
-    					serverValidated = true;
-    					logger.debug("Passed check!");
-    				}
-    			}
-    			if (!serverValidated)   // If we're not validated by the time we get here, none of our certificates matched
-    			{
-    				logger.error("No trusted certificate found for check certificate "+serverCertificate.toString());
-    				logger.error("Number of serverCertficates = "+serverCertificates.length);
-    				for (int curCertNum = 0; curCertNum < serverCertificates.length; curCertNum++)
-    					logger.error(curCertNum+":"+serverCertificates[curCertNum].toString());
-    				logger.error("Number of trusted server certificates = "+trustedServerCertificates.size());
-    				for (X509Certificate checkCertificate:trustedServerCertificates.values())
-    				{
-    					logger.error(checkCertificate.toString());
-    				}
-    				logger.error("Checking for DN "+serverCertificate.getIssuerDN().toString());
-    				for (X509Certificate checkCertificate:trustedServerCertificates.values())
-    				{
-    					logger.error("subjectDN = "+checkCertificate.getSubjectDN());
-    				}
-    				throw new AuthenticationFailureException();
-    			}
-    		} catch (NoSuchAlgorithmException e)
-    		{
-    			Logger.getLogger(getClass()).error(new ErrorLogMessage("Caught exception"), e);
-    			throw new InternalError("Could not get signature algorithm "+EntityAuthenticationServer.kCertificateSignatureAlg);
-    		} catch (InvalidKeyException e)
-    		{
-    			Logger.getLogger(getClass()).error(new ErrorLogMessage("Caught exception"), e);
-    			throw new InternalError("Got InvalidKeyException from authenticationServerCertificate");
-    		} catch (CertificateEncodingException e)
-    		{
-    			Logger.getLogger(getClass()).error(new ErrorLogMessage("Caught exception"), e);
-    			throw new AuthenticationFailureException();
-    		} catch (SignatureException e)
-    		{
-    			Logger.getLogger(getClass()).error(new ErrorLogMessage("Caught exception"), e);
-    			throw new AuthenticationFailureException();
-    		} catch (CertificateException e)
-    		{
-    			Logger.getLogger(getClass()).error(new ErrorLogMessage("Caught exception"), e);
-    			throw new AuthenticationFailureException();
-    		} catch (NoSuchProviderException e)
-    		{
-    			Logger.getLogger(getClass()).error(new ErrorLogMessage("Caught exception"), e);
-    			throw new InternalError("Got NoSuchProviderException from authenticationServerCertificate");
-    		}
-    		return new EntityAuthentication(serverCertificate);
+    		Certificate [] clientCertificates = checkChannel.getPeerCertificates();
+    		return getClientEntityAuthenticationForCertificates(clientCertificates);
+    	} catch (SSLPeerUnverifiedException e)
+    	{
+    		Logger.getLogger(getClass()).error(new ErrorLogMessage("Caught exception"), e);
     	} catch (CertificateExpiredException e)
     	{
     		Logger.getLogger(getClass()).error(new ErrorLogMessage("Caught exception"), e);
@@ -1073,6 +1138,165 @@ public abstract class EntityAuthenticationClient extends IndelibleEntity
     	throw new AuthenticationFailureException();
     }
 
+	private EntityAuthentication getClientEntityAuthenticationForCertificates(
+			Certificate[] clientCertificates)
+			throws CertificateExpiredException,
+			CertificateNotYetValidException, AuthenticationFailureException,
+			InternalError
+	{
+		X509Certificate clientCertificate = (X509Certificate) clientCertificates[0];
+		clientCertificate.checkValidity();
+		try
+		{
+			boolean serverValidated = false;
+			for (X509Certificate checkCertificate:trustedServerCertificates.values())
+			{
+				if (dnMatches(checkCertificate.getSubjectDN(), clientCertificate.getIssuerDN()))
+				{
+					clientCertificate.verify(checkCertificate.getPublicKey());
+					serverValidated = true;
+				}
+			}
+			if (!serverValidated)   // If we're not validated by the time we get here, none of our certificates matched
+			throw new AuthenticationFailureException();
+		} catch (NoSuchAlgorithmException e)
+		{
+			Logger.getLogger(getClass()).error(new ErrorLogMessage("Caught exception"), e);
+			throw new InternalError("Could not get signature algorithm "+EntityAuthenticationServer.kCertificateSignatureAlg);
+		} catch (InvalidKeyException e)
+		{
+			Logger.getLogger(getClass()).error(new ErrorLogMessage("Caught exception"), e);
+			throw new InternalError("Got InvalidKeyException from authenticationServerCertificate");
+		} catch (CertificateEncodingException e)
+		{
+			Logger.getLogger(getClass()).error(new ErrorLogMessage("Caught exception"), e);
+			throw new AuthenticationFailureException();
+		} catch (SignatureException e)
+		{
+			Logger.getLogger(getClass()).error(new ErrorLogMessage("Caught exception"), e);
+			throw new AuthenticationFailureException();
+		} catch (CertificateException e)
+		{
+			Logger.getLogger(getClass()).error(new ErrorLogMessage("Caught exception"), e);
+			throw new AuthenticationFailureException();
+		} catch (NoSuchProviderException e)
+		{
+			Logger.getLogger(getClass()).error(new ErrorLogMessage("Caught exception"), e);
+			throw new InternalError("Got NoSuchProviderException from authenticationServerCertificate");
+		}
+
+
+		return new EntityAuthentication(clientCertificate);
+	}
+    public EntityAuthentication getServerEntityAuthenticationForSocket(SSLSocket checkSocket)
+    throws AuthenticationFailureException
+    {
+    	try
+    	{
+    		Certificate [] serverCertificates = checkSocket.getSession().getLocalCertificates();
+    		return getServerEntityAuthenticationForCertificates(serverCertificates);
+    	} catch (CertificateExpiredException e)
+    	{
+    		Logger.getLogger(getClass()).error(new ErrorLogMessage("Caught exception"), e);
+    	} catch (CertificateNotYetValidException e)
+    	{
+    		Logger.getLogger(getClass()).error(new ErrorLogMessage("Caught exception"), e);
+    	}
+    	throw new AuthenticationFailureException();
+    }
+
+    public EntityAuthentication getServerEntityAuthenticationForFirehoseChannel(SSLFirehoseChannel checkChannel)
+    	    throws AuthenticationFailureException, SSLPeerUnverifiedException
+    	    {
+    	    	try
+    	    	{
+    	    		Certificate [] serverCertificates = checkChannel.getPeerCertificates();
+    	    		return getServerEntityAuthenticationForCertificates(serverCertificates);
+    	    	} catch (CertificateExpiredException e)
+    	    	{
+    	    		Logger.getLogger(getClass()).error(new ErrorLogMessage("Caught exception"), e);
+    	    	} catch (CertificateNotYetValidException e)
+    	    	{
+    	    		Logger.getLogger(getClass()).error(new ErrorLogMessage("Caught exception"), e);
+    	    	}
+    	    	throw new AuthenticationFailureException();
+    	    }
+    
+	private EntityAuthentication getServerEntityAuthenticationForCertificates(
+			Certificate[] serverCertificates)
+			throws CertificateExpiredException,
+			CertificateNotYetValidException, AuthenticationFailureException,
+			InternalError
+	{
+		if (logger.isDebugEnabled())
+		{
+			logger.debug("Number of serverCertficates = "+serverCertificates.length);
+			for (int curCertNum = 0; curCertNum < serverCertificates.length; curCertNum++)
+				logger.debug(curCertNum+":"+serverCertificates[curCertNum].toString());
+		}
+		X509Certificate serverCertificate = (X509Certificate) serverCertificates[0];
+		serverCertificate.checkValidity();
+		try
+		{
+			boolean serverValidated = false;
+			for (X509Certificate checkCertificate:trustedServerCertificates.values())
+			{
+				if (logger.isDebugEnabled())
+					logger.debug("Checking against trustedServerCertificate:"+checkCertificate.toString());
+				if (dnMatches(checkCertificate.getSubjectDN(), serverCertificate.getIssuerDN()))
+				{
+					logger.debug("DN matches");
+					serverCertificate.verify(checkCertificate.getPublicKey());
+					serverValidated = true;
+					logger.debug("Passed check!");
+				}
+			}
+			if (!serverValidated)   // If we're not validated by the time we get here, none of our certificates matched
+			{
+				logger.error("No trusted certificate found for check certificate "+serverCertificate.toString());
+				logger.error("Number of serverCertficates = "+serverCertificates.length);
+				for (int curCertNum = 0; curCertNum < serverCertificates.length; curCertNum++)
+					logger.error(curCertNum+":"+serverCertificates[curCertNum].toString());
+				logger.error("Number of trusted server certificates = "+trustedServerCertificates.size());
+				for (X509Certificate checkCertificate:trustedServerCertificates.values())
+				{
+					logger.error(checkCertificate.toString());
+				}
+				logger.error("Checking for DN "+serverCertificate.getIssuerDN().toString());
+				for (X509Certificate checkCertificate:trustedServerCertificates.values())
+				{
+					logger.error("subjectDN = "+checkCertificate.getSubjectDN());
+				}
+				throw new AuthenticationFailureException();
+			}
+		} catch (NoSuchAlgorithmException e)
+		{
+			Logger.getLogger(getClass()).error(new ErrorLogMessage("Caught exception"), e);
+			throw new InternalError("Could not get signature algorithm "+EntityAuthenticationServer.kCertificateSignatureAlg);
+		} catch (InvalidKeyException e)
+		{
+			Logger.getLogger(getClass()).error(new ErrorLogMessage("Caught exception"), e);
+			throw new InternalError("Got InvalidKeyException from authenticationServerCertificate");
+		} catch (CertificateEncodingException e)
+		{
+			Logger.getLogger(getClass()).error(new ErrorLogMessage("Caught exception"), e);
+			throw new AuthenticationFailureException();
+		} catch (SignatureException e)
+		{
+			Logger.getLogger(getClass()).error(new ErrorLogMessage("Caught exception"), e);
+			throw new AuthenticationFailureException();
+		} catch (CertificateException e)
+		{
+			Logger.getLogger(getClass()).error(new ErrorLogMessage("Caught exception"), e);
+			throw new AuthenticationFailureException();
+		} catch (NoSuchProviderException e)
+		{
+			Logger.getLogger(getClass()).error(new ErrorLogMessage("Caught exception"), e);
+			throw new InternalError("Got NoSuchProviderException from authenticationServerCertificate");
+		}
+		return new EntityAuthentication(serverCertificate);
+	}
+
     protected abstract void initializeBonjour() throws Exception;
 
     protected static EntityAuthenticationServer serverFound(java.lang.String hostName, int port)
@@ -1082,35 +1306,34 @@ public abstract class EntityAuthenticationClient extends IndelibleEntity
         boolean notBound = true;
         while (notBound && System.currentTimeMillis() - startTime < 30000)
         {
+        	Throwable lastException = null;
             try
             {
-            	/*SocketAddress entityAuthenticationServerAddress = new InetSocketAddress(hostName, port);
-            	foundEntityAuthenticationServer = new EntityAuthenticationServerNewRMIClient(entityAuthenticationServerAddress);*/
-            	Registry locateRegistry = LocateRegistry.getRegistry(hostName, port);
-                String [] availableServices = locateRegistry.list();
-                Logger.getLogger(EntityAuthenticationClient.class).debug("Attempting to bind entity authentication client for "+hostName+":"+port);
-                Logger.getLogger(EntityAuthenticationClient.class).debug("Services available:");
-                for (String curService:availableServices)
-                {
-                	Logger.getLogger(EntityAuthenticationClient.class).debug(curService);
-                }
-                foundEntityAuthenticationServer = (EntityAuthenticationServer)locateRegistry.lookup(EntityAuthenticationServer.kIndelibleEntityAuthenticationServerRMIName);
+            	SocketAddress entityAuthenticationServerAddress = new InetSocketAddress(hostName, port);
                 allocateSingleton();
-                singleton.addServer(foundEntityAuthenticationServer);
+                foundEntityAuthenticationServer = singleton.addServer(entityAuthenticationServerAddress);
                 notBound = false;
             } catch (AccessException e)
             {
-                Logger.getLogger(EntityAuthenticationClient.class).error(new ErrorLogMessage("Caught exception"), e);
+            	if (lastException != null && !lastException.getClass().equals(e.getClass()))
+            		Logger.getLogger(EntityAuthenticationClient.class).error(new ErrorLogMessage("Caught exception"), e);
+            	lastException = e;
             } catch (RemoteException e)
             {
-                Logger.getLogger(EntityAuthenticationClient.class).error(new ErrorLogMessage("Caught exception"), e);
+            	if (lastException != null && !lastException.getClass().equals(e.getClass()))
+            		Logger.getLogger(EntityAuthenticationClient.class).error(new ErrorLogMessage("Caught exception"), e);
+            	lastException = e;
             } catch (IOException e)
             {
-                Logger.getLogger(EntityAuthenticationClient.class).error(new ErrorLogMessage("Caught exception"), e);
-            } catch (NotBoundException e)
-			{
-            	 Logger.getLogger(EntityAuthenticationClient.class).error(new ErrorLogMessage("Caught exception"), e);
-			}
+            	if (lastException != null && !lastException.getClass().equals(e.getClass()))
+            		Logger.getLogger(EntityAuthenticationClient.class).error(new ErrorLogMessage("Caught exception"), e);
+            	lastException = e;
+            } catch (UnresolvedAddressException e)
+            {
+            	if (lastException != null && !lastException.getClass().equals(e.getClass()))
+            		Logger.getLogger(EntityAuthenticationClient.class).error(new ErrorLogMessage("Caught exception"), e);
+            	lastException = e;
+            }
             if (notBound)
             {
                 try
@@ -1130,34 +1353,55 @@ public abstract class EntityAuthenticationClient extends IndelibleEntity
         return foundEntityAuthenticationServer;
     }
 
-    /*
+    /**
+     * Adds a new server.  This is synchronized on the EntityAuthenticationClient itself to stop us from making multiple connections to the same
+     * server (DNSSD/Bonjour enjoys sending multiple events for the same server)
+     * @param entityAuthenticationServerAddress
+     * @return
+     * @throws IOException
+     */
+    protected synchronized EntityAuthenticationServer addServer(SocketAddress entityAuthenticationServerAddress) throws IOException
+    {
+    	synchronized(entityAuthenticationServers)
+    	{
+    		EntityAuthenticationServerConnector checkServer = entityAuthenticationServers.get(entityAuthenticationServerAddress);
+
+    		if (checkServer != null)
+    			return checkServer.getServer();
+    	}
+    	EntityAuthenticationServer foundEntityAuthenticationServer = new EntityAuthenticationServerFirehoseClient(entityAuthenticationServerAddress);
+
+    	return addServer(foundEntityAuthenticationServer);
+	}
+
+	/*
      * Adds an authentication server.  May return a different server object if the remote server has already been added
      */
-    protected EntityAuthenticationServer addServer(EntityAuthenticationServer foundEntityAuthenticationServer)
-            throws RemoteException
+    protected EntityAuthenticationServer addServer(EntityAuthenticationServer addEntityAuthenticationServer)
+            throws IOException
     {
-    	if (foundEntityAuthenticationServer != null)
+    	boolean sendAddedEvent = false;
+    	synchronized(entityAuthenticationServers)
     	{
-    		boolean sendAddedEvent = false;
-    		synchronized(entityAuthenticationServers)
+    		EntityAuthenticationServer checkServer = null;
+    		EntityAuthenticationServerConnector entityAuthenticationServerConnector = entityAuthenticationServers.get(addEntityAuthenticationServer.getServerAddress());
+			if (entityAuthenticationServerConnector != null)
+				checkServer = entityAuthenticationServerConnector.getServer();
+    		if (checkServer != null)
     		{
-    			if (!entityAuthenticationServers.contains(foundEntityAuthenticationServer))
-    			{
-    				Logger.getLogger(EntityAuthenticationClient.class).warn(new WarnLogMessage("Found entity authentication server "+foundEntityAuthenticationServer.getEntityID()));
-    				entityAuthenticationServers.add(foundEntityAuthenticationServer);
-    				entityAuthenticationServers.notifyAll();
-    				sendAddedEvent = true;
-    			}
-    			else
-    			{
-    				foundEntityAuthenticationServer = entityAuthenticationServers.get(entityAuthenticationServers.indexOf(foundEntityAuthenticationServer));
-    			}
+    			if (!checkServer.getEntityID().equals(addEntityAuthenticationServer.getEntityID()))
+    				throw new SecurityException("EntityID for "+addEntityAuthenticationServer+" does not matching entity ID for existing server "+checkServer);
+    			return checkServer;
     		}
-    		if (sendAddedEvent && singleton != null)
-    			singleton.fireEntityAuthenticationServerAppearedEvent(foundEntityAuthenticationServer);
+    		Logger.getLogger(EntityAuthenticationClient.class).warn(new WarnLogMessage("Adding entity authentication server "+addEntityAuthenticationServer.getEntityID()));
+    		entityAuthenticationServers.put(addEntityAuthenticationServer.getServerAddress(), new EntityAuthenticationServerConnector(addEntityAuthenticationServer));
+    		entityAuthenticationServers.notifyAll();
+    		sendAddedEvent = true;
     	}
-        return foundEntityAuthenticationServer;
-    }
+    	if (sendAddedEvent && singleton != null && initServerProcessed)
+    		singleton.fireEntityAuthenticationServerAppearedEvent(addEntityAuthenticationServer);
+    	return addEntityAuthenticationServer;
+     }
 
     public static EntityAuthenticationServer[] listEntityAuthenticationServers()
     {
@@ -1166,18 +1410,45 @@ public abstract class EntityAuthenticationClient extends IndelibleEntity
     }
     public EntityAuthenticationServer[] listEntityAuthenticationServersInternal()
     {
-        EntityAuthenticationServer [] returnList = new EntityAuthenticationServer[entityAuthenticationServers.size()];
-        returnList = entityAuthenticationServers.toArray(returnList);
+    	ArrayList<EntityAuthenticationServer>returnServers = new ArrayList<EntityAuthenticationServer>();
+        synchronized(entityAuthenticationServers)
+        {
+        	for (EntityAuthenticationServerConnector curServerConnector:entityAuthenticationServers.values())
+        	{
+        		try
+        		{
+        			returnServers.add(curServerConnector.getServer());
+        		}
+        		catch (Throwable t)
+        		{
+        			logger.error(new ErrorLogMessage("Could not retrieve entity authentication server"), t);
+        		}
+        	}
+        }
+        EntityAuthenticationServer [] returnList = new EntityAuthenticationServer[returnServers.size()];
+        returnList = returnServers.toArray(returnList);
         return returnList;
     }
 
     public EntityAuthenticationServer [] listTrustedServers()
     {
-        EntityAuthenticationServer [] returnList = new EntityAuthenticationServer[trustedServers.size()];
+    	ArrayList<EntityAuthenticationServer>returnTrustedServers = new ArrayList<EntityAuthenticationServer>();
         synchronized(trustedServers)
         {
-        	returnList = trustedServers.toArray(returnList);
+        	for (EntityAuthenticationServerConnector curTrustedServerConnector:trustedServers)
+        	{
+        		try
+        		{
+        			returnTrustedServers.add(curTrustedServerConnector.getServer());
+        		}
+        		catch (Throwable t)
+        		{
+        			logger.error(new ErrorLogMessage("Could not retrieve trusted entity authentication server"), t);
+        		}
+        	}
         }
+        EntityAuthenticationServer [] returnList = new EntityAuthenticationServer[returnTrustedServers.size()];
+        returnList = returnTrustedServers.toArray(returnList);
         return returnList;
     }
     /**
@@ -1189,7 +1460,9 @@ public abstract class EntityAuthenticationClient extends IndelibleEntity
     {
         try
         {
-            for (EntityAuthenticationServer checkServer:entityAuthenticationServers)
+        	EntityAuthenticationServer [] serverList;
+        	serverList = listEntityAuthenticationServersInternal();
+            for (EntityAuthenticationServer checkServer:serverList)
             {
                 if (checkServer.getEntityID().equals(serverToTrustID))
                     trustServer(checkServer);
@@ -1209,7 +1482,7 @@ public abstract class EntityAuthenticationClient extends IndelibleEntity
     {
         try
         {
-            addServer(serverToTrust);
+            serverToTrust = addServer(serverToTrust);
             serverToTrust.registerServer(mySelfSignedCert);
             synchronized(trustedServers)
             {
@@ -1217,7 +1490,7 @@ public abstract class EntityAuthenticationClient extends IndelibleEntity
                 String securityServerIDStr = securityServerID.toString();
                 if (!trustedServerCertificates.containsKey(securityServerIDStr))
                 {
-                    trustedServers.add(serverToTrust);
+                    trustedServers.add(new EntityAuthenticationServerConnector(serverToTrust));
                     X509Certificate securityServerCertificate = (X509Certificate) serverToTrust.getServerCertificate();
 
                     persistentKeyStore.setCertificateEntry(kEntityAuthenticationServerAuthenticationCertAlias+securityServerIDStr, securityServerCertificate);
@@ -1225,7 +1498,8 @@ public abstract class EntityAuthenticationClient extends IndelibleEntity
                     trustedServerCertificates.put(securityServerIDStr, securityServerCertificate);
                 }
             }
-            fireEntityAuthenticationServerTrustedEvent(serverToTrust);
+            if (initServerProcessed)
+            	fireEntityAuthenticationServerTrustedEvent(serverToTrust);
         } catch (RemoteException e)
         {
             Logger.getLogger(getClass()).error(new ErrorLogMessage("Caught exception"), e);
@@ -1284,9 +1558,23 @@ public abstract class EntityAuthenticationClient extends IndelibleEntity
         {
             eventListeners.add(EntityAuthenticationClientListener.class, listener);
         }
+        EntityAuthenticationServer [] entityAuthenticationServersArray, trustedServersArray;
+        entityAuthenticationServersArray = listEntityAuthenticationServersInternal();
+        trustedServersArray = listTrustedServers();
+        
+        for (EntityAuthenticationServer curAddServer:entityAuthenticationServersArray)
+        {
+        	EntityAuthenticationServerAppearedEvent addedEvent = new EntityAuthenticationServerAppearedEvent(this, curAddServer);
+        	listener.entityAuthenticationServerAppeared(addedEvent);
+        }
+        for (EntityAuthenticationServer curTrustedServer:trustedServersArray)
+        {
+        	EntityAuthenticationServerTrustedEvent addedEvent = new EntityAuthenticationServerTrustedEvent(this, curTrustedServer);
+        	listener.entityAuthenticationServerTrusted(addedEvent);
+        }
     }
     
-    public void removeSecurityClientListener(EntityAuthenticationClientListener removeListener)
+    public void removeEntityAuthenticationClientListener(EntityAuthenticationClientListener removeListener)
     {
         synchronized(eventListeners)
         {
@@ -1380,11 +1668,9 @@ public abstract class EntityAuthenticationClient extends IndelibleEntity
 
     public boolean isTrusted(EntityID entityAuthenticationServerID) throws RemoteException
     {
+    	waitForInitServer();
     	EntityAuthenticationServer [] tsArray = new EntityAuthenticationServer[trustedServers.size()];
-    	synchronized(trustedServers)
-    	{
-    		tsArray = trustedServers.toArray(tsArray);	// Avoid concurrent modification errors
-    	}
+    	tsArray = listTrustedServers();
         for (EntityAuthenticationServer checkServer:tsArray)
         {
             if (checkServer.getEntityID().equals(entityAuthenticationServerID))
@@ -1392,6 +1678,23 @@ public abstract class EntityAuthenticationClient extends IndelibleEntity
         }
         return false;
     }
+
+	private void waitForInitServer()
+	{
+		synchronized(this)
+    	{
+    		while(!initServerProcessed)
+    		{
+    			try
+				{
+					wait(500);
+				} catch (InterruptedException e)
+				{
+					Logger.getLogger(getClass()).error(new ErrorLogMessage("Caught exception"), e);
+				}
+    		}
+    	}
+	}
     
     public SessionAuthentication authorizeEntityForSession(EntityAuthentication entity, DataMoverSessionID sessionID) 
     		throws SSLPeerUnverifiedException, CertificateParsingException, CertificateEncodingException, InvalidKeyException, 
@@ -1407,13 +1710,12 @@ public abstract class EntityAuthenticationClient extends IndelibleEntity
     {
     	X509Certificate [] baseCertificates = baseAuthentication.getCertificateChain();
     	X509Certificate lastCert = baseCertificates[baseCertificates.length - 1];
-    	X500Name lastCertPrincipal = (X500Name) lastCert.getSubjectDN();
-    	String principalName = lastCertPrincipal.getName();
+    	String principalName =  lastCert.getSubjectDN().getName();
     	if (principalName.startsWith("CN="))
     	{
     		EntityID targetOID = getEntityIDFromPrincipalName(principalName);
     		if (!targetOID.equals(clientIdentity))
-    			throw new IllegalArgumentException("Authentication is issued to "+targetOID.toString()+", not our iD ("+clientIdentity.toString()+")");
+    			throw new IllegalArgumentException("Authentication is issued to "+targetOID.toString()+", not our ID ("+clientIdentity.toString()+")");
     		// We'll just assume it authenticates OK
     		X509Certificate forwardCert = generateCertificateToEntity(forwardTo, baseAuthentication.getSessionID());
     		SessionAuthentication returnAuthentication = new SessionAuthentication(baseAuthentication, forwardCert);
@@ -1427,7 +1729,8 @@ public abstract class EntityAuthenticationClient extends IndelibleEntity
 
     public EntityID getEntityIDFromCertificate(X509Certificate certificate)
     {
-    	return getEntityIDFromPrincipalX500Name((X500Name)certificate.getSubjectDN());
+    	Principal subjectDN = certificate.getSubjectDN();
+    	return getEntityIDFromPrincipalName(subjectDN.toString());
     }
     
     public EntityID getEntityIDFromPrincipalX500Name(X500Name principalName)

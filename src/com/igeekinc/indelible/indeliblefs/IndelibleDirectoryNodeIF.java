@@ -18,7 +18,7 @@ package com.igeekinc.indelible.indeliblefs;
 
 import java.io.IOException;
 import java.rmi.RemoteException;
-import java.util.HashMap;
+import java.util.Map;
 import java.util.concurrent.Future;
 
 import com.igeekinc.indelible.indeliblefs.core.IndelibleVersion;
@@ -43,17 +43,17 @@ public interface IndelibleDirectoryNodeIF extends IndelibleFileNodeIF
 			FileExistsException;
 
 	public abstract CreateFileInfo createChildFile(String name,
-			HashMap<String, CASIDDataDescriptor> initialForkData,
+			Map<String, CASIDDataDescriptor> initialForkData,
 			boolean exclusive) throws IOException, PermissionDeniedException,
 			FileExistsException, RemoteException;
 
 	public abstract Future<CreateFileInfo> createChildFileAsync(String name,
-			HashMap<String, CASIDDataDescriptor> initialForkData,
+			Map<String, CASIDDataDescriptor> initialForkData,
 			boolean exclusive) throws IOException, PermissionDeniedException,
 			FileExistsException, RemoteException;
 	
 	public abstract <A>void  createChildFileAsync(String name,
-			HashMap<String, CASIDDataDescriptor> initialForkData,
+			Map<String, CASIDDataDescriptor> initialForkData,
 			boolean exclusive, AsyncCompletion<CreateFileInfo, ? super A>completionHandler, A attachment) throws IOException, PermissionDeniedException,
 			FileExistsException, RemoteException;
 	
@@ -133,5 +133,10 @@ public interface IndelibleDirectoryNodeIF extends IndelibleFileNodeIF
 	
 	public abstract IndelibleDirectoryNodeIF getVersion(IndelibleVersion version,
 			RetrieveVersionFlags flags) throws IOException;
+
+	public abstract Future<IndelibleNodeInfo[]> getChildNodeInfoAsync(String[] mdToRetrieve) throws IOException, PermissionDeniedException, RemoteException;
+
+	public abstract <A> void getChildNodeInfoAsync(String[] mdToRetrieve, AsyncCompletion<IndelibleNodeInfo[], ? super A> completionHandler, A attachment)
+			throws IOException, PermissionDeniedException, RemoteException;
 
 }

@@ -63,4 +63,9 @@ public class IndelibleSnapshotInfo implements Serializable
 			return metadata.get(propertyName);
 		}
 	}
+	
+	public HashMap<String, Serializable> getMetadata()
+	{
+		return metadata;
+	}
 }

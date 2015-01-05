@@ -20,7 +20,7 @@ import java.io.IOException;
 import java.io.Serializable;
 import java.rmi.Remote;
 import java.rmi.RemoteException;
-import java.util.HashMap;
+import java.util.Map;
 
 import com.igeekinc.indelible.indeliblefs.core.IndelibleFSTransaction;
 import com.igeekinc.indelible.indeliblefs.core.IndelibleVersion;
@@ -36,6 +36,7 @@ import com.igeekinc.indelible.indeliblefs.uniblock.CASStoreInfo;
 import com.igeekinc.indelible.indeliblefs.uniblock.DataVersionInfo;
 import com.igeekinc.indelible.indeliblefs.uniblock.SegmentInfo;
 import com.igeekinc.indelible.indeliblefs.uniblock.TransactionCommittedEvent;
+import com.igeekinc.indelible.indeliblefs.uniblock.exceptions.SegmentExists;
 import com.igeekinc.indelible.indeliblefs.uniblock.exceptions.SegmentNotFound;
 import com.igeekinc.indelible.indeliblefs.uniblock.remote.RemoteCASServer;
 import com.igeekinc.indelible.oid.CASCollectionID;
@@ -118,9 +119,10 @@ public interface RemoteCASCollectionConnection extends Remote
      * @param id
      * @param segmentDescriptor
      * @throws IOException
+     * @throws SegmentExists 
      * @throws NoSpaceException 
      */
-    public void storeVersionedSegment(ObjectID id, NetworkDataDescriptor segmentDescriptor) throws IOException, RemoteException;
+    public void storeVersionedSegment(ObjectID id, NetworkDataDescriptor segmentDescriptor) throws IOException, RemoteException, SegmentExists;
     
     /**
      * Replicates a segment from another server.  Should only be called by the ReplicationManager.  Needs to be
@@ -140,7 +142,7 @@ public interface RemoteCASCollectionConnection extends Remote
      * @return true if the releaseID was in the collection, false if the releaseID was not found
      * @throws IOException
      */
-    public boolean releaseSegment(CASSegmentID releaseID) throws IOException, RemoteException;
+    public boolean releaseSegment(ObjectID releaseID) throws IOException, RemoteException;
     
     /**
      * Release the segments referred to by the ID.  If all segments referring to a particular CASIdentifier are released, the
@@ -151,10 +153,10 @@ public interface RemoteCASCollectionConnection extends Remote
      */
     public boolean[] bulkReleaseSegment(CASSegmentID [] releaseIDs) throws IOException, RemoteException;
     
-    public HashMap<String, Serializable> getMetaDataResource(String mdResourceName) 
+    public Map<String, Serializable> getMetaDataResource(String mdResourceName) 
     		throws RemoteException, PermissionDeniedException, IOException;
 
-    public void setMetaDataResource(String mdResourceName, HashMap<String, Serializable> resource)
+    public void setMetaDataResource(String mdResourceName, Map<String, Serializable> resource)
     		throws RemoteException, PermissionDeniedException, IOException;
     
     public RemoteCASServer getCASServer() throws RemoteException;

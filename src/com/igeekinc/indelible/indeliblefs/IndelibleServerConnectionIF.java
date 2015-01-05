@@ -27,6 +27,7 @@ import com.igeekinc.indelible.indeliblefs.datamover.DataMoverSession;
 import com.igeekinc.indelible.indeliblefs.datamover.NetworkDataDescriptor;
 import com.igeekinc.indelible.indeliblefs.exceptions.PermissionDeniedException;
 import com.igeekinc.indelible.indeliblefs.exceptions.VolumeNotFoundException;
+import com.igeekinc.indelible.indeliblefs.security.AuthenticationFailureException;
 import com.igeekinc.indelible.indeliblefs.security.EntityAuthentication;
 import com.igeekinc.indelible.indeliblefs.security.SessionAuthentication;
 import com.igeekinc.indelible.oid.IndelibleFSObjectID;
@@ -37,6 +38,9 @@ public interface IndelibleServerConnectionIF
 	public abstract IndelibleFSVolumeIF createVolume(Properties volumeProperties)
 			throws IOException, PermissionDeniedException;
 
+	public abstract void deleteVolume(IndelibleFSObjectID deleteVolumeID)
+		    throws VolumeNotFoundException, PermissionDeniedException, IOException;
+	
 	public abstract IndelibleFSVolumeIF retrieveVolume(
 			IndelibleFSObjectID retrieveVolumeID)
 			throws VolumeNotFoundException, IOException;
@@ -59,7 +63,7 @@ public interface IndelibleServerConnectionIF
 
 	public EntityAuthentication getClientEntityAuthentication() throws IOException;
 	
-	public EntityAuthentication getServerEntityAuthentication() throws IOException;
+	public EntityAuthentication getServerEntityAuthentication() throws IOException, AuthenticationFailureException;
 	
 	public void addClientSessionAuthentication(SessionAuthentication sessionAuthentication) throws IOException;
 	
@@ -77,4 +81,17 @@ public interface IndelibleServerConnectionIF
 			int length);
 
 	public NetworkDataDescriptor registerNetworkDescriptor(ByteBuffer byteBuffer);
+	
+	/*
+	 * Sets a per-transaction value.  This value is only valid during the current transaction.  All per transaction
+	 * data is discared at a commit or rollback.  If there is no transaction active the data will be silently discarded.
+	 * 
+	 */
+	public void setPerTransactionData(String key, Object value);
+	
+	/*
+	 * Retrieves a per-transaction value.  All values are discarded when a commit or rollback occurs.  Returns null if
+	 * there is no value for the key
+	 */
+	public Object getPerTransactionData(String key);
 }

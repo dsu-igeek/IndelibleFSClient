@@ -19,7 +19,7 @@ package com.igeekinc.indelible.indeliblefs.remote;
 import java.io.IOException;
 import java.rmi.Remote;
 import java.rmi.RemoteException;
-import java.util.HashMap;
+import java.util.Map;
 
 import com.igeekinc.indelible.indeliblefs.core.IndelibleVersion;
 import com.igeekinc.indelible.indeliblefs.core.IndelibleVersionIterator;
@@ -34,10 +34,10 @@ public interface IndelibleFSObjectRemote extends Remote
     public abstract String[] listMetaDataResources()
             throws PermissionDeniedException, RemoteException, IOException;
 
-    public abstract HashMap<String, Object> getMetaDataResource(String mdResourceName) 
+    public abstract Map<String, Object> getMetaDataResource(String mdResourceName) 
         throws RemoteException, PermissionDeniedException, IOException;
     
-    public abstract IndelibleFSObjectRemote setMetaDataResource(String mdResourceName, HashMap<String, Object> resource)
+    public abstract IndelibleFSObjectRemote setMetaDataResource(String mdResourceName, Map<String, Object> resource)
         throws RemoteException, PermissionDeniedException, IOException;
     
     public abstract IndelibleVersionIterator listVersions() throws RemoteException, IOException;

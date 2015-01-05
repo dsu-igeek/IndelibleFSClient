@@ -28,4 +28,7 @@ public class VolumeNotFoundException extends IndelibleFSException
         volumeID = inVolumeID;
         reason = inReason;
     }
+	public VolumeNotFoundException()
+	{
+	}
 }

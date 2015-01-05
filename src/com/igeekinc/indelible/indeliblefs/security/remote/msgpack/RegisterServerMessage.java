@@ -40,12 +40,17 @@ public class RegisterServerMessage extends CommandMessage
 	
 	public RegisterServerMessage(X509Certificate certificate) throws CertificateEncodingException
 	{
-		super(EntityAuthenticationServerFirehoseClient.EntityAuthenticationCommand.kRegisterServerCommand.getCommandNum());
 		x509Cert = new X509CertificateMsgPack(certificate);
 	}
 	
 	public X509Certificate getX509Certificate() throws CertificateException
 	{
 		return x509Cert.getX509Certificate();
+	}
+
+	@Override
+	protected int getInitCommandCode()
+	{
+		return EntityAuthenticationServerFirehoseClient.EntityAuthenticationCommand.kRegisterServerCommand.getCommandNum();
 	}
 }

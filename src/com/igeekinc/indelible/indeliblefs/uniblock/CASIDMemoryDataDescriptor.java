@@ -100,6 +100,7 @@ class GeneratorManager
     QueuedDescriptor next(CASIDGeneratorRunnable runnable)
     {
     	boolean exit = false;
+    	int numWaits = 0;
     	while (!exit)
     	{
     		try
@@ -116,8 +117,12 @@ class GeneratorManager
     		{
     			if (generateQueue.size() == 0)
     			{
-    				exit = true;
-    				generatorRunnables.remove(runnable);
+    				numWaits ++;
+    				if (numWaits > 100)
+    				{
+    					exit = true;
+    					generatorRunnables.remove(runnable);
+    				}
     			}
     		}
     	}
@@ -325,5 +330,10 @@ public class CASIDMemoryDataDescriptor extends BasicDataDescriptor implements
     {
     	getCASIdentifier();	// Make sure the CAS ID has been generated!
     	out.defaultWriteObject();	// Go ahead and write us the regular way
+    }
+    
+    public void release()
+    {
+    	// We should let go of the memory here but for the moment this is just a no-op
     }
 }
