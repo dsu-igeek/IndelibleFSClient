@@ -145,6 +145,7 @@ public abstract class IndelibleFSClient
 		@Override
 		public void run()
 		{
+			Throwable lastThrowable = null;
 			while(true)
 			{
 				try
@@ -153,7 +154,9 @@ public abstract class IndelibleFSClient
 					return;
 				} catch (Throwable e)
 				{
-					Logger.getLogger(getClass()).error(new DebugLogMessage("Caught exception connecting to server {0}", new Serializable[]{hostStr+":" + port}), e);
+					if (lastThrowable == null || !lastThrowable.getClass().equals(e.getClass()))
+						Logger.getLogger(getClass()).error(new ErrorLogMessage("Caught exception connecting to server {0}", new Serializable[]{hostStr+":" + port}), e);
+					lastThrowable = e;
 				}
 				try
 				{
