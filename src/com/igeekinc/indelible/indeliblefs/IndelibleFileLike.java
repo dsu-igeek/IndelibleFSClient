@@ -31,7 +31,6 @@ import org.apache.log4j.Logger;
 import com.igeekinc.indelible.indeliblefs.exceptions.ForkNotFoundException;
 import com.igeekinc.indelible.indeliblefs.exceptions.ObjectNotFoundException;
 import com.igeekinc.indelible.indeliblefs.exceptions.PermissionDeniedException;
-import com.igeekinc.indelible.indeliblefs.remote.IndelibleDirectoryNodeRemote;
 import com.igeekinc.indelible.indeliblefs.remote.IndelibleFSForkRemoteInputStream;
 import com.igeekinc.util.ClientFileMetaData;
 import com.igeekinc.util.ClientFileMetaDataProperties;
@@ -109,7 +108,7 @@ public class IndelibleFileLike implements FileLike
 		{
 			try
 			{
-				return ((IndelibleDirectoryNodeRemote)wrappedNode).list();
+				return ((IndelibleDirectoryNodeIF)wrappedNode).list();
 			} catch (PermissionDeniedException e)
 			{
 				throw new IOException("Permission denied");
@@ -126,7 +125,7 @@ public class IndelibleFileLike implements FileLike
 			String[] rawNames;
 			try
 			{
-				rawNames = ((IndelibleDirectoryNodeRemote)wrappedNode).list();
+				rawNames = ((IndelibleDirectoryNodeIF)wrappedNode).list();
 			} catch (PermissionDeniedException e)
 			{
 				throw new IOException("Permission denied");

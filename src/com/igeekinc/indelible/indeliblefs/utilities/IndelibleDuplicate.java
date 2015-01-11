@@ -29,15 +29,15 @@ import java.security.SignatureException;
 import java.security.UnrecoverableKeyException;
 import java.security.cert.CertificateException;
 
+import com.igeekinc.indelible.indeliblefs.CreateFileInfo;
+import com.igeekinc.indelible.indeliblefs.IndelibleDirectoryNodeIF;
 import com.igeekinc.indelible.indeliblefs.IndelibleFSVolumeIF;
+import com.igeekinc.indelible.indeliblefs.IndelibleFileNodeIF;
 import com.igeekinc.indelible.indeliblefs.exceptions.FileExistsException;
 import com.igeekinc.indelible.indeliblefs.exceptions.NotFileException;
 import com.igeekinc.indelible.indeliblefs.exceptions.ObjectNotFoundException;
 import com.igeekinc.indelible.indeliblefs.exceptions.PermissionDeniedException;
 import com.igeekinc.indelible.indeliblefs.exceptions.VolumeNotFoundException;
-import com.igeekinc.indelible.indeliblefs.remote.CreateFileInfoRemote;
-import com.igeekinc.indelible.indeliblefs.remote.IndelibleDirectoryNodeRemote;
-import com.igeekinc.indelible.indeliblefs.remote.IndelibleFileNodeRemote;
 import com.igeekinc.indelible.indeliblefs.security.AuthenticationFailureException;
 import com.igeekinc.indelible.oid.IndelibleFSObjectID;
 import com.igeekinc.indelible.oid.ObjectIDFactory;
@@ -122,7 +122,7 @@ public class IndelibleDuplicate extends IndelibleFSUtilBase
             System.exit(1);
         }
         
-        IndelibleFileNodeRemote sourceFile = null, checkFile = null;
+        IndelibleFileNodeIF sourceFile = null, checkFile = null;
         
         // Our semantics on the name of the created file are the same as Unix cp.  If the create path specifies a directory, the
         // name will be the source file name (unless no source file is specified, in which case it's an error).  If the create path
@@ -135,7 +135,7 @@ public class IndelibleDuplicate extends IndelibleFSUtilBase
         
         try
         {
-        	sourceFile = (IndelibleFileNodeRemote) volume.getObjectByPath(sourcePath);
+        	sourceFile = volume.getObjectByPath(sourcePath);
         } catch (ObjectNotFoundException e1)
         {
 
@@ -149,7 +149,7 @@ public class IndelibleDuplicate extends IndelibleFSUtilBase
         
         try
         {
-        	checkFile = (IndelibleFileNodeRemote)volume.getObjectByPath(destPath);
+        	checkFile = volume.getObjectByPath(destPath);
         	if (checkFile != null && !checkFile.isDirectory())
         	{
         		System.err.println(destPath+" exists");
@@ -161,7 +161,7 @@ public class IndelibleDuplicate extends IndelibleFSUtilBase
         {
         	try
         	{
-        		checkFile = (IndelibleFileNodeRemote)volume.getObjectByPath(destPath.getParent());
+        		checkFile = volume.getObjectByPath(destPath.getParent());
         		createName = destPath.getName();
         	}
         	catch (ObjectNotFoundException e1)
@@ -177,12 +177,12 @@ public class IndelibleDuplicate extends IndelibleFSUtilBase
         }
         if (checkFile.isDirectory())
         {
-            IndelibleDirectoryNodeRemote parentDir = (IndelibleDirectoryNodeRemote)checkFile;
+            IndelibleDirectoryNodeIF parentDir = (IndelibleDirectoryNodeIF)checkFile;
             if (sourceFile != null)
             {
 
                     try {
-						CreateFileInfoRemote createFileInfo = parentDir.createChildFile(createName, (IndelibleFSObjectID)sourceFile.getObjectID(), true);
+						CreateFileInfo createFileInfo = parentDir.createChildFile(createName, sourceFile, true);
 					} catch (FileExistsException e) {
 						// TODO Auto-generated catch block
 						e.printStackTrace();

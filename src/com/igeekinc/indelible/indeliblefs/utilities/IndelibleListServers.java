@@ -37,7 +37,6 @@ import com.igeekinc.indelible.indeliblefs.firehose.IndelibleFSClient;
 import com.igeekinc.indelible.indeliblefs.firehose.IndelibleFSServerAddedEvent;
 import com.igeekinc.indelible.indeliblefs.firehose.IndelibleFSServerListListener;
 import com.igeekinc.indelible.indeliblefs.firehose.IndelibleFSServerRemovedEvent;
-import com.igeekinc.indelible.indeliblefs.remote.IndelibleFileNodeRemote;
 import com.igeekinc.indelible.indeliblefs.security.AuthenticationFailureException;
 import com.igeekinc.indelible.oid.EntityID;
 import com.igeekinc.util.logging.ErrorLogMessage;
@@ -140,12 +139,7 @@ public class IndelibleListServers extends IndelibleFSUtilBase
 		}
 		System.out.println("--------------------");
 	}
-    
-    void listIndelibleFile(String listFileName, IndelibleFileNodeRemote listFile) throws RemoteException
-    {
-        System.out.println(listFile.totalLength()+" "+listFileName);
-    }
-    
+
     private void showUsage()
     {
         System.err.println("Usage: IndelibleVolumeList");

@@ -34,10 +34,8 @@ import java.util.Properties;
 
 import com.igeekinc.indelible.indeliblefs.exceptions.PermissionDeniedException;
 import com.igeekinc.indelible.indeliblefs.exceptions.VolumeNotFoundException;
-import com.igeekinc.indelible.indeliblefs.remote.IndelibleFileNodeRemote;
 import com.igeekinc.indelible.indeliblefs.security.AuthenticationFailureException;
 import com.igeekinc.indelible.indeliblefs.uniblock.CASServerConnectionIF;
-import com.igeekinc.indelible.indeliblefs.uniblock.remote.RemoteCASServerConnection;
 
 public class IndelibleAddCASStore extends IndelibleFSUtilBase
 {
@@ -94,11 +92,6 @@ public class IndelibleAddCASStore extends IndelibleFSUtilBase
             	break;
     		}
     	}
-    }
-
-	void listIndelibleFile(String listFileName, IndelibleFileNodeRemote listFile) throws RemoteException
-    {
-        System.out.println(listFile.totalLength()+" "+listFileName);
     }
     
     private void showUsage()

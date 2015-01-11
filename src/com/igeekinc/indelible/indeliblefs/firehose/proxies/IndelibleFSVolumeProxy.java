@@ -161,7 +161,7 @@ public class IndelibleFSVolumeProxy extends IndelibleFSObjectProxy implements In
 	public IndelibleFileNodeIF getObjectByID(IndelibleFSObjectID id)
 			throws IOException, ObjectNotFoundException
 	{
-		ComboFutureBase<IndelibleFSFileHandle>getObjectFuture = new ComboFutureBase<IndelibleFSFileHandle>();
+		ComboFutureBase<IndelibleFSObjectHandle>getObjectFuture = new ComboFutureBase<IndelibleFSObjectHandle>();
 		getClient().getObjectByIDAsync(getConnection(), getHandle(), id, getObjectFuture, null);
 
 		try
@@ -184,7 +184,7 @@ public class IndelibleFSVolumeProxy extends IndelibleFSObjectProxy implements In
 			IndelibleVersion version, RetrieveVersionFlags flags)
 			throws IOException, ObjectNotFoundException
 	{
-		ComboFutureBase<IndelibleFSFileHandle>getObjectFuture = new ComboFutureBase<IndelibleFSFileHandle>();
+		ComboFutureBase<IndelibleFSObjectHandle>getObjectFuture = new ComboFutureBase<IndelibleFSObjectHandle>();
 		getClient().getObjectByIDAndVersionAsync(getConnection(), getHandle(), id, version, flags, getObjectFuture, null);
 
 		try
@@ -209,7 +209,7 @@ public class IndelibleFSVolumeProxy extends IndelibleFSObjectProxy implements In
 	 *
 	 * @param <A>
 	 */
-	class IndelibleFileNodeCompletion<A> implements AsyncCompletion<IndelibleFSFileHandle, A>
+	class IndelibleFileNodeCompletion<A> implements AsyncCompletion<IndelibleFSObjectHandle, A>
 	{
 		AsyncCompletion<IndelibleFileNodeIF, A>completionHandler;
 		A attachment;
@@ -219,7 +219,7 @@ public class IndelibleFSVolumeProxy extends IndelibleFSObjectProxy implements In
 			this.attachment = attachment;
 		}
 		@Override
-		public void completed(IndelibleFSFileHandle result,
+		public void completed(IndelibleFSObjectHandle result,
 				Object ignored)
 		{
 			try

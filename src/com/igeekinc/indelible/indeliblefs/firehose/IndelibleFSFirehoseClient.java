@@ -356,17 +356,19 @@ public class IndelibleFSFirehoseClient extends AuthenticatedFirehoseClient
 		sendMessage(getObjectByPathMessage);
 	}
 
-	public <A> void getObjectByIDAsync(IndelibleFSServerConnectionProxy connection, IndelibleFSVolumeHandle volume, IndelibleFSObjectID id, AsyncCompletion<IndelibleFSFileHandle, A>completionHandler, A attachment)
+	public <A> void getObjectByIDAsync(IndelibleFSServerConnectionProxy connection, IndelibleFSVolumeHandle volume, IndelibleFSObjectID id, AsyncCompletion<IndelibleFSObjectHandle, A>completionHandler, A attachment)
 			throws IOException, ObjectNotFoundException
 	{
-		throw new UnsupportedOperationException();
+		GetObjectByIDMessage<A> getObjectByIDMessage = new GetObjectByIDMessage<A>(this, connection, volume, id, completionHandler, attachment);
+		sendMessage(getObjectByIDMessage);
 	}
 
 	public <A> void getObjectByIDAndVersionAsync(IndelibleFSServerConnectionProxy connection, IndelibleFSVolumeHandle volume, IndelibleFSObjectID id,
-			IndelibleVersion version, RetrieveVersionFlags flags, AsyncCompletion<IndelibleFSFileHandle, A>completionHandler, A attachment)
+			IndelibleVersion version, RetrieveVersionFlags flags, AsyncCompletion<IndelibleFSObjectHandle, A>completionHandler, A attachment)
 			throws IOException
 	{
-		throw new UnsupportedOperationException();
+		GetObjectByIDAndVersionMessage<A> getObjectByIDAndVersionMessage = new GetObjectByIDAndVersionMessage<A>(this, connection, volume, id, version, flags, completionHandler, attachment);
+		sendMessage(getObjectByIDAndVersionMessage);
 	}
 
 	public <A> void deleteObjectByIDAsync(IndelibleFSServerConnectionProxy connection, IndelibleFSVolumeHandle volume, IndelibleFSObjectID id, AsyncCompletion<Void, A>completionHandler, A attachment) throws IOException

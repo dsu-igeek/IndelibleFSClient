@@ -25,7 +25,9 @@ import com.igeekinc.indelible.oid.EntityID;
 
 public interface IndelibleFSServer
 {
-
+    public static final String kIndelibleFSBonjourServiceName = "_indeliblefs._tcp";
+    public static final String kIndelibleAuthBonjourServiceName = "_indelibleau._tcp";
+    
 	public IndelibleServerConnectionIF open() throws IOException, PermissionDeniedException, AuthenticationFailureException;
 
 	public EntityID getServerID() throws IOException;

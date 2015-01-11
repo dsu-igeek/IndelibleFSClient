@@ -44,12 +44,11 @@ public class GetObjectByIDAndVersionMessage<A>
 	}
 
 	public GetObjectByIDAndVersionMessage(IndelibleFSFirehoseClient client, 
-			IndelibleFSServerCommand command,
 			IndelibleFSServerConnectionProxy connection, 
 			IndelibleFSVolumeHandle volume,
 			IndelibleFSObjectID id,
 			IndelibleVersion version,
-			int flags,
+			RetrieveVersionFlags flags,
 			AsyncCompletion<IndelibleFSObjectHandle, A> callerCompletionHandler,
 			A attachment)
 	{
@@ -57,7 +56,7 @@ public class GetObjectByIDAndVersionMessage<A>
 		this.volume = new IndelibleFSObjectHandleMsgPack(volume);
 		this.id = new IndelibleFSObjectIDMsgPack(id);
 		this.version = new IndelibleVersionMsgPack(version);
-		this.flags = flags;
+		this.flags = flags.getFlagValue();
 	}
 
 	@Override

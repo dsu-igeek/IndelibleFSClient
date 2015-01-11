@@ -38,7 +38,6 @@ public class GetObjectByIDMessage<A>
 	}
 
 	public GetObjectByIDMessage(IndelibleFSFirehoseClient client, 
-			IndelibleFSServerCommand command,
 			IndelibleFSServerConnectionProxy connection, 
 			IndelibleFSVolumeHandle volume,
 			IndelibleFSObjectID id,
